@@ -1,0 +1,390 @@
+.d9-page {
+  --d9-ink: #292c39;
+  --d9-blue: #5a55c8;
+  min-height: 100vh;
+  background: #f7f6fb;
+  color: var(--d9-ink);
+  font-family: Inter, "Segoe UI", sans-serif;
+}
+.d9-page * {
+  box-sizing: border-box;
+}
+.d9-page .preview-nav {
+  z-index: 50;
+}
+.d9-head {
+  position: sticky;
+  z-index: 20;
+  top: 0;
+  height: 74px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 34px 0 118px;
+  background: #fff;
+  border-bottom: 1px solid #dfdced;
+}
+.d9-head > div:first-child {
+  display: grid;
+  gap: 2px;
+}
+.d9-head span {
+  color: #777487;
+  font-size: 12px;
+}
+.d9-head strong {
+  font-size: 16px;
+}
+.d9-day-control {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.d9-day-control button {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #ddd9e9;
+  border-radius: 8px;
+  background: #fff;
+  color: #555367;
+  cursor: pointer;
+}
+.d9-day-control svg {
+  width: 17px;
+}
+.d9-day-control label {
+  position: relative;
+  min-width: 220px;
+  padding: 9px 34px 9px 12px;
+  border: 1px solid #d8d4e8;
+  border-radius: 8px;
+  text-align: center;
+  font-weight: 700;
+}
+.d9-day-control label span {
+  color: var(--d9-ink);
+  font-size: 14px;
+}
+.d9-day-control input {
+  position: absolute;
+  inset: 0 4px 0 auto;
+  width: 28px;
+  border: 0;
+  background: transparent;
+  color: transparent;
+}
+.d9-browse {
+  width: calc(100% - 410px);
+  padding: 29px 28px 60px 34px;
+}
+.d9-browse-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+.d9-browse-head h1 {
+  margin: 0;
+  font:
+    760 28px/1.1 Inter,
+    "Segoe UI",
+    sans-serif;
+  letter-spacing: -0.025em;
+}
+.d9-browse-head p {
+  margin: 6px 0 0;
+  color: #706e7e;
+  font-size: 14px;
+}
+.d9-browse-head select {
+  height: 38px;
+  min-width: 150px;
+  padding: 0 10px;
+  border: 1px solid #d9d6e4;
+  border-radius: 8px;
+  background: #fff;
+  color: var(--d9-ink);
+  font-weight: 650;
+}
+.d9-categories {
+  display: flex;
+  gap: 7px;
+  margin-bottom: 18px;
+  overflow: auto;
+}
+.d9-categories button {
+  padding: 8px 12px;
+  border: 1px solid #dedbe8;
+  border-radius: 7px;
+  background: #fff;
+  color: #676475;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.d9-categories button.active {
+  border-color: #5a55c8;
+  background: #eeeefe;
+  color: #4540ad;
+  font-weight: 700;
+}
+.d9-place-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(310px, 1fr));
+  gap: 12px;
+}
+.d9-place-grid article {
+  min-height: 144px;
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  grid-template-rows: 1fr auto;
+  gap: 0 14px;
+  padding: 11px;
+  border: 1px solid #e0ddeb;
+  border-radius: 10px;
+  background: #fff;
+}
+.d9-photo {
+  grid-row: 1/3;
+  width: 110px;
+  height: 122px;
+  border-radius: 7px;
+  overflow: hidden;
+}
+.d9-place-grid h2 {
+  margin: 2px 0 6px;
+  font:
+    730 15px/1.25 Inter,
+    "Segoe UI",
+    sans-serif;
+}
+.d9-place-grid article > div:nth-child(2) > p {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin: 0;
+  color: #676575;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.d9-place-grid article > div:nth-child(2) > span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 7px;
+  color: #7b7889;
+  font-size: 10px;
+}
+.d9-place-grid svg {
+  width: 13px;
+}
+.d9-card-actions {
+  grid-column: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+}
+.d9-card-actions > span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #777487;
+  font-size: 10px;
+}
+.d9-card-actions button {
+  height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--d9-blue);
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.d9-card-actions button:disabled {
+  background: #e7e5ef;
+  color: #777487;
+  cursor: default;
+}
+.d9-plan {
+  position: fixed;
+  z-index: 10;
+  top: 74px;
+  right: 0;
+  bottom: 0;
+  width: 410px;
+  padding: 24px;
+  background: #fff;
+  border-left: 1px solid #dedbea;
+  overflow: auto;
+}
+.d9-plan-title {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  padding-bottom: 17px;
+  border-bottom: 1px solid #e5e2ee;
+}
+.d9-plan-title h2 {
+  margin: 0;
+  font:
+    780 23px/1 Inter,
+    "Segoe UI",
+    sans-serif;
+}
+.d9-plan-title p {
+  margin: 5px 0 0;
+  color: #747181;
+  font-size: 13px;
+}
+.d9-plan-title > span {
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: #efedfb;
+  color: #4c47b0;
+  font-size: 11px;
+  font-weight: 700;
+}
+.d9-timeline {
+  padding: 15px 0;
+}
+.d9-event,
+.d9-free {
+  position: relative;
+  min-height: 55px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 8px 10px 54px;
+  border-bottom: 1px solid #eeeaf4;
+}
+.d9-event > svg,
+.d9-free > svg {
+  position: absolute;
+  left: 12px;
+  top: 14px;
+  width: 17px;
+  color: #665fc6;
+}
+.d9-event > div,
+.d9-free > div {
+  display: grid;
+  gap: 4px;
+}
+.d9-event strong,
+.d9-free strong {
+  font-size: 13px;
+}
+.d9-event small,
+.d9-free small {
+  color: #777486;
+  font-size: 11px;
+  line-height: 1.35;
+}
+.d9-time {
+  position: absolute;
+  left: 8px;
+  top: 13px;
+  width: 39px;
+  color: #716e80 !important;
+  font-size: 10px !important;
+}
+.d9-event > button {
+  margin-left: auto;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: #f0eef6;
+  color: #6d697a;
+  cursor: pointer;
+}
+.d9-event > button svg {
+  width: 13px;
+}
+.d9-event.booking {
+  background: #f7f6ff;
+  border-radius: 8px;
+}
+.d9-event.travel {
+  background: #f8fafc;
+}
+.d9-free {
+  margin-top: 8px;
+  border: 1px dashed #c9c5db;
+  border-radius: 8px;
+  background: #fbfafe;
+}
+.d9-mini-map {
+  height: 190px !important;
+  min-height: 190px;
+  border: 1px solid #dedbea;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.d9-local {
+  margin: 8px 0 0;
+  text-align: center;
+  color: #8a8796;
+  font-size: 10px;
+}
+@media (max-width: 1050px) {
+  .d9-place-grid {
+    grid-template-columns: 1fr;
+  }
+  .d9-browse {
+    width: calc(100% - 370px);
+  }
+  .d9-plan {
+    width: 370px;
+  }
+}
+@media (max-width: 760px) {
+  .d9-head {
+    height: auto;
+    min-height: 108px;
+    align-items: flex-start;
+    padding: 18px 12px 12px;
+  }
+  .d9-day-control {
+    margin-top: 34px;
+  }
+  .d9-day-control label {
+    min-width: 160px;
+  }
+  .d9-browse {
+    width: 100%;
+    padding: 22px 12px 520px;
+  }
+  .d9-plan {
+    position: absolute;
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: 500px;
+    border-left: 0;
+    border-top: 1px solid #dedbea;
+  }
+  .d9-browse-head {
+    align-items: flex-start;
+  }
+  .d9-place-grid article {
+    grid-template-columns: 90px 1fr;
+  }
+  .d9-photo {
+    width: 90px;
+  }
+}
+.d9-place-grid article > div:nth-child(2) > p { font-size:14px; }

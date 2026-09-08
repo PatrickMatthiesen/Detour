@@ -1,0 +1,42 @@
+# .NET build output
+**/bin/
+**/obj/
+
+# Frontend dependencies and generated output
+web/node_modules/
+web/dist/
+
+# Aspire and deployment artifacts (regenerate with the CLI)
+artifacts/
+.aspire/
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+appsettings.Local.json
+appsettings.*.Local.json
+*.pfx
+*.p12
+*.key
+.local/
+**/TestResults/
+
+# Private source exports and locally prepared data
+*.csv
+data/*.json
+
+# IDE and OS files
+.vs/
+.vscode/*.user
+*.user
+*.suo
+Thumbs.db
+Desktop.ini
+
+# Local agent installations and private runtime data
+.agents/
+skills-lock.json
+*.sqlite*
+*.db
+*.log

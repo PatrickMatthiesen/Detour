@@ -1,0 +1,86 @@
+{
+  "Ginza": {
+    "url": "/design-photos/ginza.jpg",
+    "title": "Ginza",
+    "source": "https://en.wikipedia.org/wiki/Ginza",
+    "fileSource": "https://commons.wikimedia.org/wiki/File:Ginza-WAKO_at_night.jpg",
+    "lat": 35.671217,
+    "lon": 139.765007
+  },
+  "Gōtoku-ji": {
+    "url": "/design-photos/g-toku-ji.jpg",
+    "title": "Gōtoku-ji",
+    "source": "https://en.wikipedia.org/wiki/G%C5%8Dtoku-ji",
+    "fileSource": "https://commons.wikimedia.org/wiki/File:Gotokuji.jpg",
+    "lat": 35.64877778,
+    "lon": 139.64741667
+  },
+  "Ghibli Museum": {
+    "url": "/design-photos/ghibli-museum.jpg",
+    "title": "Ghibli Museum",
+    "source": "https://en.wikipedia.org/wiki/Ghibli_Museum",
+    "fileSource": "https://commons.wikimedia.org/wiki/File:Ghibli_Museum_2024.JPG",
+    "lat": 35.69623333,
+    "lon": 139.57043056
+  },
+  "Todoroki Valley": null,
+  "Akihabara": {
+    "url": "/design-photos/akihabara.png",
+    "title": "Akihabara",
+    "source": "https://en.wikipedia.org/wiki/Akihabara",
+    "fileSource": "https://commons.wikimedia.org/wiki/File:Sotokanda%2C_Akihabara_Electric_Town_at_night_20231114.png",
+    "lat": 35.69833333,
+    "lon": 139.77305556
+  },
+  "Kōenji": {
+    "url": "/design-photos/k-enji.jpg",
+    "title": "Kōenji",
+    "source": "https://en.wikipedia.org/wiki/K%C5%8Denji",
+    "fileSource": "https://commons.wikimedia.org/wiki/File:Koenji_pal.JPG",
+    "lat": 35.70527778,
+    "lon": 139.65111111
+  },
+  "Nakano Broadway": {
+    "url": "/design-photos/nakano-broadway.jpg",
+    "title": "Nakano Broadway",
+    "source": "https://en.wikipedia.org/wiki/Nakano_Broadway",
+    "fileSource": "https://commons.wikimedia.org/wiki/File:Nakano_broadway_entrance.JPG",
+    "lat": 35.70916667,
+    "lon": 139.66555556
+  },
+  "Tsukemen": {
+    "url": "/design-photos/tsukemen.jpg",
+    "title": "Tsukemen",
+    "source": "https://en.wikipedia.org/wiki/Tsukemen",
+    "fileSource": "https://commons.wikimedia.org/wiki/File:Tsukemen_at_a_Tokyo_restaurant.jpg",
+    "lat": null,
+    "lon": null
+  },
+  "Melonpan": {
+    "url": "/design-photos/melonpan.jpg",
+    "title": "Melonpan",
+    "source": "https://en.wikipedia.org/wiki/Melonpan",
+    "fileSource": "https://commons.wikimedia.org/wiki/File:Melonpan_on_the_plastic_bag.jpg",
+    "lat": null,
+    "lon": null
+  },
+  "Ghibli Park": null,
+  "Kyoto": {
+    "error": "HTTP Error 429: Too Many Requests"
+  },
+  "Osaka": {
+    "error": "HTTP Error 429: Too Many Requests"
+  },
+  "Hakone": {
+    "error": "HTTP Error 429: Too Many Requests"
+  },
+  "Nagoya": {
+    "error": "HTTP Error 429: Too Many Requests"
+  },
+  "Asakusa": {
+    "error": "HTTP Error 429: Too Many Requests"
+  },
+  "Japanese calligraphy": {
+    "error": "HTTP Error 429: Too Many Requests"
+  }
+}
