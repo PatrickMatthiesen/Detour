@@ -258,7 +258,7 @@
 .plan-place-row { border-bottom: 1px solid var(--plan-line); display: grid; gap: 11px; grid-template-columns: 110px minmax(0, 1fr); padding: 13px 0; }
 .plan-place-photo { background: #e7ece6; border-radius: 4px; height: 96px; margin: 0; overflow: hidden; position: relative; width: 110px; }
 .plan-place-photo img { display: block; height: 100%; object-fit: cover; width: 100%; }
-.plan-place-photo .dk-credit { bottom: 3px; font-size: 7px; opacity: .8; right: 3px; }
+.plan-place-photo .dk-credit { inset: 5px auto auto 5px; font-size: 9px; line-height: 1.4; z-index: 1; }
 .plan-place-photo figcaption { background: linear-gradient(transparent, rgba(0,0,0,.62)); bottom: 0; color: #fff; font-size: 8px; left: 0; padding: 14px 5px 4px; position: absolute; right: 0; }
 .plan-place-copy { min-width: 0; }
 .plan-place-title { align-items: start; display: flex; gap: 5px; justify-content: space-between; }
@@ -333,3 +333,56 @@
 .plan-capacity span {max-width:155px;}
 .plan-toggle-stays {display:none;}
 @media(max-width:640px){.plan-toggle-stays{display:block;border:0;background:#e4eee5;border-radius:5px;padding:6px 10px;font-size:12px;}.plan-stays:not(.is-expanded) .plan-stay-list {display:none;}}
+
+.plan-stay-list {gap:9px 18px;}.plan-stay {position:relative;overflow:visible;}.plan-stay:not(:last-child)::after {content:"→";position:absolute;right:-16px;top:50%;transform:translateY(-50%);color:#758981;font-size:15px;}
+.plan-lodging-status {flex-wrap:wrap;gap:8px;}.plan-lodging-status button {margin-left:auto;background:#fcf3e3;border:1px solid #dfc58e;padding:7px 10px;border-radius:5px;color:#805a1c;font-size:13px;}
+.plan-place-row.no-photo {grid-template-columns:1fr;}.plan-place-title {display:flex;align-items:flex-start;justify-content:space-between;gap:12px;}.plan-add-icon {display:flex;align-items:center;justify-content:center;flex:none;width:32px;height:32px;background:#fffdf8;border:1px solid #dbb0a5;border-radius:6px;color:#ae4b3a;}.plan-add-icon.is-added {background:#e2efe4;color:#326245;border-color:#a9cbb3;}
+@media(max-width:640px){.plan-view-tools{flex-wrap:wrap;}.plan-date-nav{gap:2px;}.plan-date-list{gap:2px;}.plan-lodging-status button{margin-left:0;}}
+
+.plan-page.calendar-open .plan-stays {display:none;}
+/* Keep navigation on one row and give the day a consistent reading rhythm. */
+.plan-calendar-switch {display:flex;align-items:center;justify-content:center;gap:6px;flex:none;align-self:center;border:1px solid var(--plan-line);border-radius:6px;background:#fffdf8;color:var(--plan-muted);padding:8px;font-size:12px;}
+.plan-calendar-switch:hover {color:var(--plan-coral);border-color:var(--plan-coral);}
+.plan-date-nav {padding:14px 0 20px;}
+.plan-layout {gap:28px;}
+.plan-day-heading {flex-direction:column;gap:10px;}
+.plan-day-heading p {margin-top:5px;}
+.plan-capacity {flex-direction:row;align-items:baseline;gap:8px;border:0;padding:0;text-align:left;margin:0;}
+.plan-capacity strong {font-size:16px;}
+.plan-capacity span {max-width:none;font-size:12px;}
+.plan-commitments,.plan-activities {margin-top:20px;padding-top:14px;}
+.plan-section-head {margin-bottom:6px;}
+.plan-commitment {padding:10px 0;}
+.plan-lodging-status {padding:12px 0 0;line-height:1.5;}
+.plan-empty {padding:8px 0;line-height:1.5;}
+.plan-capacity-note {padding-top:10px;font-size:11px;}
+.plan-places-column {padding-left:24px;}
+.plan-city-filter {margin-top:12px;}
+@media(max-width:920px){.plan-places-column{padding-left:0;}}
+@media(max-width:640px){.plan-calendar-switch span{display:none;}.plan-calendar-switch{padding:7px;}.plan-date-nav{gap:3px;}.plan-capacity{flex-wrap:wrap;gap:3px 8px;}.plan-day-heading{display:flex;}.plan-layout{gap:20px;}}
+
+.plan-edit-stays{padding:0;border:0;background:transparent;font-size:12px;color:#a43c32;text-decoration:underline;}
+
+/* Compact route overview; labels remain available in the stay editor. */
+.plan-stays{gap:12px;padding:8px 0;}
+.plan-stays-label{flex-basis:44px;justify-content:flex-start;padding-top:8px;font-weight:600;}
+.plan-stay-list{grid-template-columns:repeat(auto-fit,minmax(195px,1fr));gap:6px 16px;}
+.plan-stay{flex-direction:row;align-items:baseline;justify-content:space-between;gap:6px;padding:6px 8px;border-top-width:2px;}
+.plan-stay strong{font-size:12px;line-height:1.4;}
+.plan-stay span{flex:none;font-size:11px;}
+.plan-stay:not(:last-child)::after{right:-14px;font-size:13px;}
+.plan-date-nav{padding:10px 0 14px;}
+.plan-day-heading{gap:5px;}
+.plan-day-title{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 12px;}
+.plan-day-title h1{font-size:23px;}
+.plan-day-title p{margin:0;font-size:13px;}
+.plan-capacity{gap:6px;}
+.plan-capacity strong{font-size:14px;}
+.plan-commitments{margin-top:12px;padding-top:12px;}
+.plan-place-row.no-photo{padding:11px 0;}
+.plan-place-row.no-photo .plan-place-copy{position:relative;}
+.plan-place-row.no-photo .plan-place-title{padding-right:42px;}
+.plan-place-row.no-photo .plan-add-icon{position:absolute;right:0;top:0;}
+.plan-place-row.no-photo .plan-place-meta{padding-right:42px;margin-top:4px;line-height:1.4;}
+.plan-place-row.no-photo .plan-place-copy p{margin-top:5px;}
+@media(max-width:640px){.plan-stays-label{padding-top:0;margin-bottom:0;align-items:center;}.plan-stay-list{grid-template-columns:1fr;}.plan-stays.is-expanded .plan-stay-list{margin-top:8px;}.plan-stay:not(:last-child)::after{content:none;}.plan-day-title h1{font-size:22px;}}

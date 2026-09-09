@@ -20,7 +20,7 @@ export function useDesignTrip(){
 export function cityPlaces(trip:TripSnapshot|null,city:string){return trip?.places.filter(p=>!city||city==='All'||city==='All cities'||p.city===city)??[]}
 export function shortDate(date:string){return new Intl.DateTimeFormat('en-GB',{day:'numeric',month:'short',timeZone:'UTC'}).format(new Date(date.slice(0,10)+'T12:00:00Z'))}
 export function PreviewNav({active}:{active:number}){return <header className="dk-nav"><a href="/" className="dk-trip"><Compass size={19}/><strong>Japan 2026</strong><span>30 Sep – 25 Oct</span></a><nav aria-label="Design alternatives">{designNames.map((n,i)=><a key={n} href={'/'+(i+4)} className={active===i+4?'dk-active':''} title={n}>{i+4}<span>{n}</span></a>)}</nav><span className="dk-preview" title="Your saved trip is unchanged. Reload to reset this preview.">Preview only</span></header>}
-function photoFor(p:Place):{photo:Photo|null;caption:string}{
+export function photoFor(p:Place):{photo:Photo|null;caption:string}{
  const n=p.name.toLowerCase();let key='',caption='';
  if(n.includes('gotokuji')) key='Gōtoku-ji';else if(n.includes('ghibli museum'))key='Ghibli Museum';
  else if(n.includes('melon')){key='Melonpan';caption='Melonpan · food reference'}

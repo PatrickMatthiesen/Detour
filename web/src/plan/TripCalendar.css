@@ -1,0 +1,279 @@
+.trip-calendar, .trip-calendar-indicators {
+  --calendar-ink: var(--plan-ink, #273535);
+  --calendar-muted: var(--plan-muted, #687875);
+  --calendar-faint: var(--plan-faint, #8d9992);
+  --calendar-line: var(--plan-line, #dfe4dc);
+  --calendar-paper: var(--plan-paper, #fbfaf6);
+  --calendar-coral: var(--plan-coral, #b94f3f);
+  --calendar-coral-soft: var(--plan-coral-soft, #f6e2dc);
+  --calendar-sage: var(--plan-sage, #58765f);
+  --calendar-sage-soft: var(--plan-sage-soft, #e4eee5);
+  --calendar-blue: var(--plan-blue, #426b80);
+  --calendar-blue-soft: var(--plan-blue-soft, #e4edf0);
+  --calendar-gold: var(--plan-gold, #95702b);
+  --calendar-gold-soft: var(--plan-gold-soft, #f5edda);
+  color: var(--calendar-ink);
+  min-width: 0;
+}
+
+.trip-calendar *,
+.trip-calendar *::before,
+.trip-calendar *::after { box-sizing: border-box; }
+
+.trip-calendar h2,
+.trip-calendar p { margin: 0; }
+
+.trip-calendar-heading {
+  align-items: end;
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+  margin-bottom: 13px;
+}
+
+.trip-calendar-heading h2 {
+  font-family: Lato, Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -.025em;
+  line-height: 1.2;
+}
+
+.trip-calendar-heading p,
+.trip-calendar-range {
+  color: var(--calendar-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.trip-calendar-heading-actions { align-items: center; display: flex; flex: none; gap: 8px; }
+.trip-calendar-range { flex: none; }
+.trip-calendar-day-view {
+  background: transparent;
+  border: 1px solid var(--calendar-line);
+  border-radius: 4px;
+  color: var(--calendar-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  padding: 4px 7px;
+}
+.trip-calendar-day-view:hover { background: var(--calendar-paper); color: var(--calendar-ink); }
+.trip-calendar-day-view:focus-visible { outline: 2px solid var(--calendar-coral); outline-offset: 2px; }
+
+.trip-calendar-scroll { overflow-x: auto; scrollbar-width: thin; }
+
+.trip-calendar-grid-wrap { min-width: 0; }
+
+.trip-calendar-weekdays,
+.trip-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.trip-calendar-weekdays {
+  border-bottom: 1px solid var(--calendar-line);
+  color: var(--calendar-faint);
+  gap: 1px;
+  padding: 0 1px;
+}
+
+.trip-calendar-weekdays span {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 0 8px 7px;
+}
+
+.trip-calendar-day,
+.trip-calendar-blank {
+  min-height: 108px;
+}
+
+.trip-calendar-day {
+  appearance: none;
+  background: var(--calendar-paper);
+  border: 0;
+  border-bottom: 1px solid var(--calendar-line);
+  border-right: 1px solid var(--calendar-line);
+  color: var(--calendar-ink);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px 8px 8px;
+  text-align: left;
+  transition: background-color 130ms ease, box-shadow 130ms ease;
+}
+
+.trip-calendar-day:nth-child(7n) { border-right: 0; }
+.trip-calendar-day:hover { background: #f3f2ec; }
+.trip-calendar-day:focus-visible { box-shadow: inset 0 0 0 3px rgba(185, 79, 63, .28); outline: 0; position: relative; z-index: 1; }
+.trip-calendar-day.is-selected { background: var(--calendar-coral-soft); box-shadow: inset 0 3px 0 var(--calendar-coral); }
+.trip-calendar-day.is-selected:hover { background: #f2d9d2; }
+
+.trip-calendar-date {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  line-height: 1;
+}
+
+.trip-calendar-date > span {
+  color: var(--calendar-muted);
+  font-size: 10px;
+  font-weight: 700;
+  width: 100%;
+}
+
+.trip-calendar-date strong {
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.04em;
+}
+
+.trip-calendar-date small {
+  color: var(--calendar-muted);
+  font-size: 11px;
+}
+
+.trip-calendar-day.is-selected .trip-calendar-date > span,
+.trip-calendar-day.is-selected .trip-calendar-date small { color: var(--calendar-coral); }
+
+.trip-calendar-indicators {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-height: 20px;
+}
+
+.trip-calendar-indicator {
+  align-items: center;
+  border-radius: 4px;
+  display: inline-flex;
+  flex: none;
+  gap: 2px;
+  justify-content: center;
+  min-height: 20px;
+  min-width: 20px;
+  padding: 2px 4px;
+}
+
+.trip-calendar-indicator[role="button"] {
+  cursor: help;
+  outline: 0;
+}
+
+.trip-calendar-indicator[role="button"]:focus-visible {
+  box-shadow: 0 0 0 2px var(--calendar-paper), 0 0 0 4px var(--calendar-coral);
+}
+
+.trip-calendar-popover {
+  --calendar-ink: var(--plan-ink, #273535);
+  --calendar-muted: var(--plan-muted, #687875);
+  background: var(--calendar-paper, #fbfaf6);
+  border: 1px solid var(--calendar-line, #dfe4dc);
+  border-radius: 8px;
+  box-shadow: 0 12px 30px rgba(39, 53, 53, .16);
+  color: var(--calendar-ink);
+  inset: auto;
+  margin: 0;
+  max-height: min(270px, calc(100vh - 20px));
+  max-width: min(340px, calc(100vw - 20px));
+  min-width: min(220px, calc(100vw - 20px));
+  padding: 11px 13px 12px;
+  position: fixed;
+  width: min(340px, calc(100vw - 20px));
+  z-index: 1000;
+}
+
+.trip-calendar-popover::backdrop { background: transparent; }
+.trip-calendar-popover h3 { color: var(--calendar-ink); font-size: 14px; line-height: 1.3; margin: 0 0 7px; }
+.trip-calendar-popover ul { list-style: none; margin: 0; max-height: 220px; overflow-y: auto; padding: 0; }
+.trip-calendar-popover li { border-top: 1px solid var(--calendar-line, #dfe4dc); color: var(--calendar-muted); font-size: 13px; line-height: 1.5; padding: 6px 0 0; }
+.trip-calendar-popover li + li { margin-top: 6px; }
+
+.trip-calendar-indicator b { font-size: 10px; font-variant-numeric: tabular-nums; }
+.trip-calendar-indicator--activity { background: var(--calendar-coral-soft); color: var(--calendar-coral); }
+.trip-calendar-indicator--booking { background: var(--calendar-gold-soft); color: var(--calendar-gold); }
+.trip-calendar-indicator--travel { background: var(--calendar-blue-soft); color: var(--calendar-blue); }
+.trip-calendar-indicator--hotel { background: var(--calendar-sage-soft); color: var(--calendar-sage); }
+.trip-calendar-indicator--hotel.is-missing { background: var(--calendar-gold-soft); color: var(--calendar-gold); }
+.trip-calendar-indicator--hotel.is-outside { background: #eef0eb; color: var(--calendar-faint); }
+.trip-calendar-indicator--unknown { background: var(--calendar-gold-soft); color: var(--calendar-gold); }
+.trip-calendar-indicator--overlap { background: #f3dfd8; color: #a74738; }
+
+.trip-calendar-indicators--dots .trip-calendar-indicator {
+  background: transparent;
+  gap: 3px;
+  min-width: 17px;
+  padding: 2px 1px;
+}
+
+.trip-calendar-indicators--dots .trip-calendar-indicator i {
+  background: currentColor;
+  border-radius: 50%;
+  display: block;
+  height: 7px;
+  width: 7px;
+}
+
+.trip-calendar-indicators--dots .trip-calendar-indicator--hotel { color: var(--calendar-sage); }
+.trip-calendar-indicators--dots .trip-calendar-indicator--hotel.is-missing { color: var(--calendar-gold); }
+.trip-calendar-indicators--dots .trip-calendar-indicator--hotel.is-outside { color: var(--calendar-faint); }
+.trip-calendar-indicators--dots .trip-calendar-indicator--unknown,
+.trip-calendar-indicators--dots .trip-calendar-indicator--overlap { color: var(--calendar-gold); }
+.trip-calendar-indicators--dots .trip-calendar-indicator--overlap i { border-radius: 2px; transform: rotate(45deg); }
+
+.trip-calendar-label {
+  align-items: center;
+  border-radius: 3px;
+  display: inline-flex;
+  font-size: 10px;
+  gap: 3px;
+  line-height: 1.2;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 3px 5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trip-calendar-label b { font-variant-numeric: tabular-nums; }
+.trip-calendar-label--activity { background: var(--calendar-coral-soft); color: var(--calendar-coral); }
+.trip-calendar-label--booking { background: var(--calendar-gold-soft); color: var(--calendar-gold); }
+.trip-calendar-label--travel { background: var(--calendar-blue-soft); color: var(--calendar-blue); }
+.trip-calendar-label--hotel { background: var(--calendar-sage-soft); color: var(--calendar-sage); }
+.trip-calendar-label--hotel.is-missing { background: var(--calendar-gold-soft); color: var(--calendar-gold); }
+.trip-calendar-label--hotel.is-outside { background: #eef0eb; color: var(--calendar-faint); }
+.trip-calendar-label--unknown { background: var(--calendar-gold-soft); color: var(--calendar-gold); }
+.trip-calendar-label--overlap { background: #f3dfd8; color: #a74738; }
+
+.trip-calendar-blank { border-bottom: 1px solid var(--calendar-line); border-right: 1px solid var(--calendar-line); }
+.trip-calendar-blank:nth-child(7n) { border-right: 0; }
+
+.trip-calendar-day[aria-current="date"] { outline-offset: -3px; }
+
+@media (max-width: 560px) {
+  .trip-calendar-heading { align-items: start; flex-direction: column; gap: 3px; }
+  .trip-calendar-heading-actions { width: 100%; }
+  .trip-calendar-range { font-size: 11px; }
+  .trip-calendar-scroll { margin-inline: -1px; }
+  .trip-calendar-grid-wrap { min-width: 640px; }
+  .trip-calendar-day,
+  .trip-calendar-blank { min-height: 101px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trip-calendar-day { transition: none; }
+}
+
+.plan-date .trip-calendar-indicators {justify-content:center;}
+.trip-calendar-contents {display:flex;flex-direction:column;gap:7px;text-align:left;font-size:12px;line-height:1.35;min-width:0;}
+.trip-calendar-contents>strong {font-size:13px;line-height:1.3;}
+.trip-calendar-contents>span {display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+.trip-calendar-contents small {font-size:10px;color:#677772;display:block;}
+.trip-calendar-contents em {font-style:normal;font-size:11px;color:#8b642b;}
+.trip-calendar-day {justify-content:flex-start;gap:10px;}

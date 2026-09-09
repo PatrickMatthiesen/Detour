@@ -820,3 +820,7 @@
   .d4-city-tabs {grid-template-columns:repeat(3,minmax(0,1fr)) 94px;gap:4px;}
   .d4-map-inspector {bottom:12px;}
 }
+
+.d4-stays-list {gap:8px 17px;}
+.d4-stay {position:relative;overflow:visible;}
+.d4-stay:not(:last-child)::after {content:"→";position:absolute;right:-15px;top:50%;transform:translateY(-50%);color:#758981;font-size:14px;}

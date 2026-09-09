@@ -34,7 +34,7 @@ function placeFullDescription(place: Place) {
 function cityStayStrip(trip: ReturnType<typeof useDesignTrip>["trip"]) {
   if (!trip) return [];
   const stops: { city: string; checkIn: string; checkOut: string }[] = [];
-  for (const stay of trip.stays) {
+  for (const stay of [...trip.stays].sort((a,b)=>a.checkIn.localeCompare(b.checkIn))) {
     const last = stops.at(-1);
     if (last && last.city === stay.city) {
       last.checkOut = stay.checkOut;
@@ -306,7 +306,7 @@ export function PlacesExplorer({trip, selected, toggle, loading, error, header, 
 
       <footer className="d4-stays" aria-label="Planned city stays">
         <div className="d4-stays-label">
-          <strong>Stays</strong>
+          <strong>Route</strong>
         </div>
         <div className="d4-stays-list">
           {stays.length ? (
