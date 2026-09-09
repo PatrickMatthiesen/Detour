@@ -3,7 +3,10 @@
 services:
   compose-dashboard:
     ports: !reset []
+  postgres:
+    restart: unless-stopped
   api:
+    restart: unless-stopped
     ports: !reset []
     environment:
       ASPNETCORE_ENVIRONMENT: Production
@@ -31,12 +34,15 @@ services:
         source: "${AUTH_KEYS_DIR:?Set absolute persistent cookie-key directory}"
         target: /var/lib/tripadvisor/keys
   web:
+    restart: unless-stopped
     ports: !override
       - "127.0.0.1:8080:5000"
     environment:
       # The gateway is loopback-published and reachable through the tunnel only.
       # Restore cloudflared's external HTTPS scheme before YARP forwards to API.
       ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+      REVERSEPROXY__ROUTES__health__CLUSTERID: api
+      REVERSEPROXY__ROUTES__health__MATCH__PATH: /health
       REVERSEPROXY__ROUTES__auth__CLUSTERID: api
       REVERSEPROXY__ROUTES__auth__MATCH__PATH: /auth/{**catch-all}
       REVERSEPROXY__ROUTES__connect__CLUSTERID: api

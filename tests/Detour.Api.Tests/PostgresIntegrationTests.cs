@@ -58,22 +58,67 @@ public sealed class PostgresIntegrationTests : IAsyncLifetime
         if (!HasDatabase()) return;
         await using var db = CreateDb();
         var service = CreateService(db, "seed-owner");
-        var seedPath = FindSeed();
+        var seed = new TripSnapshot
+        {
+            Version = 7,
+            Trip = new TripDocument
+            {
+                Id = "synthetic-trip",
+                Name = "Synthetic Trip",
+                StartDate = new DateOnly(2026, 9, 30),
+                EndDate = new DateOnly(2026, 10, 25),
+                TimeZone = "Asia/Tokyo",
+                Arrival = new FlightAnchor
+                {
+                    Airport = "HND",
+                    LocalDateTime = new DateTimeOffset(2026, 9, 30, 16, 45, 0, TimeSpan.FromHours(9)),
+                    Date = new DateOnly(2026, 9, 30),
+                    Raw = "synthetic arrival"
+                }
+            },
+            Places = [new Place { Id = "seed-place", Name = "Synthetic Place", City = "Tokyo", SourceUrl = "https://example.test/place" }],
+            Stays = [new Stay { Id = "seed-stay", Name = "Synthetic Stay", City = "Tokyo", CheckIn = new DateOnly(2026, 9, 30), CheckOut = new DateOnly(2026, 10, 1) }],
+            TravelLegs = [new TravelLeg { Id = "seed-leg", From = "Tokyo", To = "Kyoto", Date = new DateOnly(2026, 10, 1), Mode = "train", Estimated = false }],
+            Activities = [new Activity { Id = "seed-activity", Title = "Synthetic Activity", Date = new DateOnly(2026, 10, 1) }],
+            Bookings = [new Booking
+            {
+                Id = "seed-booking",
+                Kind = "flight",
+                Title = "Synthetic Flight",
+                Start = new DateTimeOffset(2026, 10, 1, 10, 0, 0, TimeSpan.FromHours(2)),
+                End = new DateTimeOffset(2026, 10, 1, 12, 0, 0, TimeSpan.FromHours(2)),
+                Location = "HND"
+            }],
+            Tasks = [new TripTask { Id = "seed-task", Title = "Synthetic Task" }],
+            PackingItems = [new PackingItem { Id = "seed-packing", Name = "Synthetic Packing Item" }]
+        };
+        var seedPath = Path.Combine(Path.GetTempPath(), $"tripadvisor-seed-{Guid.NewGuid():N}.json");
 
-        await service.SeedAsync(seedPath, "seed-owner");
-        await using var secondDb = CreateDb();
-        var reloaded = await CreateService(secondDb, "seed-owner").GetSnapshotAsync();
+        try
+        {
+            await File.WriteAllTextAsync(seedPath, JsonSerializer.Serialize(seed, JsonOptions));
+            await service.SeedAsync(seedPath, "seed-owner");
+            await using var secondDb = CreateDb();
+            var reloaded = await CreateService(secondDb, "seed-owner").GetSnapshotAsync();
 
-        Assert.Equal(0, reloaded.Version);
-        Assert.Equal(89, reloaded.Places.Count);
-        Assert.Equal(11, reloaded.Stays.Count);
-        Assert.Equal(12, reloaded.TravelLegs.Count);
-        Assert.Equal(2, reloaded.Activities.Count);
-        Assert.Equal(6, reloaded.Bookings.Count);
-        Assert.Equal("Asia/Tokyo", reloaded.Trip.TimeZone);
-        var flight = Assert.Single(reloaded.Bookings, x => x.Title.StartsWith("QR160", StringComparison.Ordinal));
-        Assert.Equal(TimeSpan.FromHours(2), flight.Start!.Value.Offset);
-        Assert.Equal("HND", reloaded.Trip.Arrival?.Airport);
+            Assert.Equal(7, reloaded.Version);
+            Assert.Single(reloaded.Places);
+            Assert.Equal("seed-place", Assert.Single(reloaded.Places).Id);
+            Assert.Equal("Synthetic Stay", Assert.Single(reloaded.Stays).Name);
+            Assert.Equal("seed-leg", Assert.Single(reloaded.TravelLegs).Id);
+            Assert.Equal("Synthetic Activity", Assert.Single(reloaded.Activities).Title);
+            Assert.Equal("Synthetic Flight", Assert.Single(reloaded.Bookings).Title);
+            Assert.Equal("Synthetic Task", Assert.Single(reloaded.Tasks).Title);
+            Assert.Equal("Synthetic Packing Item", Assert.Single(reloaded.PackingItems).Name);
+            Assert.Equal("Asia/Tokyo", reloaded.Trip.TimeZone);
+            Assert.Equal("HND", reloaded.Trip.Arrival?.Airport);
+            Assert.Equal(TimeSpan.FromHours(9), reloaded.Trip.Arrival!.LocalDateTime!.Value.Offset);
+            Assert.Equal(TimeSpan.FromHours(2), Assert.Single(reloaded.Bookings).Start!.Value.Offset);
+        }
+        finally
+        {
+            if (File.Exists(seedPath)) File.Delete(seedPath);
+        }
     }
 
     [Fact]
@@ -263,18 +308,6 @@ public sealed class PostgresIntegrationTests : IAsyncLifetime
     }
 
     private static TripSnapshot Clone(TripSnapshot snapshot) => JsonSerializer.Deserialize<TripSnapshot>(JsonSerializer.Serialize(snapshot, JsonOptions), JsonOptions)!;
-
-    private static string FindSeed()
-    {
-        var current = new DirectoryInfo(AppContext.BaseDirectory);
-        while (current is not null)
-        {
-            var candidate = Path.Combine(current.FullName, "data", "japan-2026.seed.json");
-            if (File.Exists(candidate)) return candidate;
-            current = current.Parent;
-        }
-        throw new FileNotFoundException("Real Japan seed not found.");
-    }
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 

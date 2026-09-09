@@ -43,6 +43,10 @@ The API exposes MCP at `/mcp` using the official C# MCP SDK. It shares owner-sco
 
 See the [agent tool guide](docs/mcp-tools.md) for focused edits, partial-update semantics, paging, and conflict recovery.
 
+## Deployment
+
+GitHub Actions runs verification on pushes and pull requests. The manual **Deploy Detour** workflow builds through Aspire and deploys through Tailscale/SSH after verification, using the `Production` environment. See [self-hosting and workflow setup](docs/self-hosting.md). Production credentials stay on the target server.
+
 ## Tests
 
 ```powershell

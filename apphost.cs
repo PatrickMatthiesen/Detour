@@ -9,10 +9,11 @@ var builder = DistributedApplication.CreateBuilder(args);
 
 // Compose is used by `aspire publish`/`aspire deploy`; local development still runs
 // the project and database resources directly through the AppHost.
-var compose = builder.AddDockerComposeEnvironment("compose");
+var compose = builder.AddDockerComposeEnvironment("compose")
+    .ConfigureComposeFile(file => file.Name = "detour");
 
 var postgres = builder.AddPostgres("postgres")
-    .WithDataVolume();
+    .WithDataVolume(builder.ExecutionContext.IsPublishMode ? "detour-postgres-data" : null);
 
 var tripDb = postgres.AddDatabase("tripdb");
 

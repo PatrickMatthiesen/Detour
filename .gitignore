@@ -40,3 +40,7 @@ skills-lock.json
 *.sqlite*
 *.db
 *.log
+
+# Python script caches
+__pycache__/
+*.pyc
