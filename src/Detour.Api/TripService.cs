@@ -39,8 +39,9 @@ public sealed class TripService(TripDbContext db, OwnerAccessor ownerAccessor)
         try { await db.SaveChangesAsync(cancellationToken); }
         catch (DbUpdateConcurrencyException)
         {
-            var current = await db.Trips.AsNoTracking().SingleAsync(x => x.OwnerId == owner, cancellationToken);
-            return new ReplaceResult.Conflict(Read(current));
+            // Reset tracked values too, so another tool call in this scope reads the winner.
+            await db.Entry(row).ReloadAsync(cancellationToken);
+            return new ReplaceResult.Conflict(Read(row));
         }
         return new ReplaceResult.Success(input);
     }

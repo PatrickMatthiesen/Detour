@@ -41,6 +41,8 @@ This writes `docker-compose.yaml`, a placeholder `.env`, and the generated front
 
 The API exposes MCP at `/mcp` using the official C# MCP SDK. It shares owner-scoped persistence and validation with the HTTP API. ASP.NET Core Identity with Google sign-in handles browser sessions; OpenIddict supplies OAuth authorization for ChatGPT. The optional local-development owner is restricted to explicitly enabled local development. See [authentication](docs/authentication.md) for credentials, client registration, and key configuration. Google sign-in and a live ChatGPT connection require configuration and end-to-end verification on the chosen hostname.
 
+See the [agent tool guide](docs/mcp-tools.md) for focused edits, partial-update semantics, paging, and conflict recovery.
+
 ## Tests
 
 ```powershell

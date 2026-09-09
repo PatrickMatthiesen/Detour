@@ -20,6 +20,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<OwnerAccessor>();
 builder.Services.AddScoped<TripService>();
+builder.Services.AddScoped<TripItemEditor>();
 builder.Services.AddAntiforgery(options => options.HeaderName = "X-CSRF-TOKEN");
 
 var connectionString = builder.Configuration.GetConnectionString("tripdb")

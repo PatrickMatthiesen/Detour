@@ -20,7 +20,7 @@ The expected snapshot shape is:
 
 Fields may be absent or null. The client preserves unknown coordinates and only plots exact markers when both latitude and longitude exist. Dates are ISO calendar dates in the trip timezone. A successful PUT returns the saved snapshot, including its incremented `version`; a conflict should return `409` with the current snapshot.
 
-The plugin-facing API can later expose the same application operations: search places, create/update place, select place, read trip, create booking, and update task/packing status. Keep those operations behind the same domain service as HTTP mutations.
+The MCP tools expose section reads and focused create/update/delete operations for places, bookings, tasks, packing items, activities, stays, and travel legs. Partial updates preserve omitted fields and use the same persistence/version checks as HTTP. See [agent tools](mcp-tools.md). Full-snapshot replacement is not exposed as an MCP tool.
 
 Backend implementation notes:
 

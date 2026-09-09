@@ -89,6 +89,8 @@ public sealed class PostgresIntegrationTests : IAsyncLifetime
         var left = Clone(initial); left.Places.Add(new Place { Id = "race-left", Name = "Left", City = "Tokyo" });
         var right = Clone(initial); right.Places.Add(new Place { Id = "race-right", Name = "Right", City = "Tokyo" });
 
+        await service1.GetSnapshotAsync();
+        await service2.GetSnapshotAsync();
         var results = await Task.WhenAll(service1.ReplaceAsync(left, initial.Version), service2.ReplaceAsync(right, initial.Version));
 
         Assert.Equal(1, results.Count(x => x is ReplaceResult.Success));
@@ -97,6 +99,12 @@ public sealed class PostgresIntegrationTests : IAsyncLifetime
         var final = await CreateService(verifyDb, "race-owner").GetSnapshotAsync();
         Assert.Equal(2, final.Version);
         Assert.Single(final.Places);
+        var loser = results[0] is ReplaceResult.Conflict ? service1 : service2;
+        var recovered = await loser.GetSnapshotAsync();
+        Assert.Equal(final.Places[0].Id, Assert.Single(recovered.Places).Id);
+        var edit = await new TripItemEditor(loser).EditAsync("places", "update", final.Places[0].Id,
+            new System.Text.Json.Nodes.JsonObject { ["selected"] = true }, final.Version);
+        Assert.True(edit.Success);
     }
 
     [Fact]
@@ -121,21 +129,23 @@ public sealed class PostgresIntegrationTests : IAsyncLifetime
         if (!HasDatabase()) return;
         await using var db = CreateDb();
         var service = CreateService(db, "mcp-owner");
-        var tools = new TripMcpTools(service);
-        var initial = JsonSerializer.Deserialize<JsonElement>(await tools.GetTrip());
-        Assert.Equal(1, initial.GetProperty("version").GetInt64());
-        var place = new Place { Id = "mcp-place", Name = "MCP Place", City = "Tokyo", SourceUrl = "https://example.test/reel" };
-        var second = JsonSerializer.Deserialize<JsonElement>(await tools.SavePlace(place, 1));
-        Assert.True(second.TryGetProperty("snapshot", out var savedSnapshot), second.ToString());
-        Assert.Equal(2, savedSnapshot.GetProperty("version").GetInt64());
-        var sameSource = new Place { Id = "mcp-place-2", Name = "Second Reel Place", City = "Tokyo", SourceUrl = place.SourceUrl };
-        await tools.SavePlace(sameSource, 2);
-        var booking = new Booking { Id = "mcp-booking", Kind = "hotel", Title = "MCP Hotel", Status = "confirmed", CheckIn = new DateOnly(2026, 10, 1), CheckOut = new DateOnly(2026, 10, 3) };
-        await tools.UpdateBooking(booking, 3);
-        var final = JsonSerializer.Deserialize<JsonElement>(await tools.GetTrip());
-        Assert.Equal(2, final.GetProperty("places").GetArrayLength());
-        Assert.Contains(final.GetProperty("places").EnumerateArray(), x => x.GetProperty("id").GetString() == "mcp-place-2");
-        Assert.Contains(final.GetProperty("bookings").EnumerateArray(), x => x.GetProperty("id").GetString() == "mcp-booking");
+        var tools = new TripMcpTools(service, new TripItemEditor(service));
+        var initial = await tools.GetTrip();
+        Assert.Equal(1, initial.Version);
+        var second = await tools.EditPlace(EditOperation.create, "mcp-place", 1,
+            new PlaceChanges { Name = "MCP Place", City = "Tokyo", SourceUrl = "https://example.test/reel" });
+        Assert.True(second.Success);
+        Assert.Equal(2, second.Version);
+        Assert.True((await tools.EditPlace(EditOperation.create, "mcp-place-2", 2,
+            new PlaceChanges { Name = "Second Reel Place", City = "Tokyo", SourceUrl = "https://example.test/reel" })).Success);
+        Assert.True((await tools.EditBooking(EditOperation.create, "mcp-booking", 3,
+            new BookingChanges { Kind = "hotel", Title = "MCP Hotel", Status = "confirmed", CheckIn = new(2026, 10, 1), CheckOut = new(2026, 10, 3) })).Success);
+        var final = await service.GetSnapshotAsync();
+        Assert.Equal(2, final.Places.Count);
+        Assert.Contains(final.Places, x => x.Id == "mcp-place-2");
+        Assert.Contains(final.Bookings, x => x.Id == "mcp-booking");
+        Assert.False((await tools.EditBooking(EditOperation.update, "mcp-booking", 3, new BookingChanges { Title = "Stale" })).Success);
+        Assert.Equal("MCP Hotel", Assert.Single((await service.GetSnapshotAsync()).Bookings).Title);
     }
 
     [Fact]
