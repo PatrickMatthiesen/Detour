@@ -1,0 +1,28 @@
+.prepare-page{max-width:1140px;margin:0 auto;padding:24px;color:#293b3b;font:15px/1.45 Lato,sans-serif}
+.prepare-page button,.prepare-editor button{font:inherit;cursor:pointer}
+.prepare-heading,.prepare-heading nav,.prepare-toolbar,.prepare-filters{display:flex;align-items:center;gap:12px}
+.prepare-heading{justify-content:flex-start;gap:24px;flex-wrap:wrap;border-bottom:1px solid #dfe4dc;padding-bottom:16px;margin-bottom:20px}
+.prepare-heading h1{font:700 26px/1.2 Lato,sans-serif;margin:0;letter-spacing:-.6px}
+.prepare-page .prepare-heading nav{flex-direction:row;width:auto;padding:0;background:transparent}
+.prepare-heading button,.prepare-filters button{display:inline-flex;align-items:center;gap:7px;border:0;background:transparent;border-radius:6px;padding:8px 12px;color:#546967}
+.prepare-heading button[aria-pressed=true]{background:#f9e5dc;color:#ad4735}
+.prepare-filters{gap:3px}.prepare-filters button{padding:6px 10px;font-size:14px}.prepare-filters button[aria-pressed=true]{background:#e1ece3;color:#345e4e}
+.prepare-toolbar{flex-wrap:wrap;margin-bottom:24px}.prepare-progress{margin-left:auto;color:#6c7d78;font-size:13px}
+.prepare-add{display:inline-flex;align-items:center;justify-content:center;gap:6px;background:#b94f3f!important;color:white!important;border:1px solid #b94f3f!important;border-radius:5px;padding:8px 12px}
+.prepare-checklist{display:grid;grid-template-columns:1fr 1fr;gap:36px}
+.prepare-section-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-bottom:10px;border-bottom:2px solid #aac6b2}
+.prepare-checklist h2{font-size:17px;margin:0;padding:0}
+.prepare-checklist section:last-child .prepare-section-heading{border-color:#e8c991}
+.prepare-section-add{display:inline-flex;align-items:center;gap:5px;flex-shrink:0;border:1px solid #e6c3b8;border-radius:5px;background:#fffaf5;color:#ad4735;padding:5px 8px;font-size:13px!important}
+.prepare-section-add:hover{background:#f9e5dc}
+.prepare-task{display:flex;align-items:center;gap:10px;padding:13px 0;border-bottom:1px solid #e4e8e0}
+.prepare-task input{width:18px;height:18px;flex-shrink:0;accent-color:#527b64;cursor:pointer}
+.prepare-task-title{flex:1;min-width:0;text-align:left;border:0;background:none;padding:0;color:inherit;line-height:1.4!important}
+.prepare-task-title:hover{text-decoration:underline;text-underline-offset:3px}.is-done .prepare-task-title{text-decoration:line-through;color:#819087}
+.prepare-task-status{display:inline-flex;align-items:center;gap:4px;max-width:115px;font-size:12px;color:#728078;flex-shrink:0}.status-overdue{color:#b44435}.status-today,.status-reminder{color:#966319}
+.prepare-empty{color:#78847e;font-size:14px;margin:18px 0}.prepare-reminder-note{display:flex;align-items:center;gap:7px;color:#78847e;font-size:12px;margin:28px 0 0}
+.prepare-editor{margin:auto;width:min(480px,calc(100vw - 28px));max-height:calc(100dvh - 32px);padding:0;border:1px solid #dfe4dc;border-radius:10px;background:#fbfaf6;color:#293b3b;font:15px/1.45 Lato,sans-serif}
+.prepare-editor::backdrop{background:#25342d66}.prepare-editor header,.prepare-editor footer{display:flex;align-items:center;gap:10px;padding:16px 20px}.prepare-editor header{border-bottom:1px solid #e2e5dd;justify-content:space-between}.prepare-editor h2{font-size:21px;margin:0}.prepare-editor header button{border:0;background:none;padding:3px;color:inherit}
+.prepare-editor-fields{padding:18px 20px;display:grid;gap:14px}.prepare-editor label{display:grid;gap:5px;font-size:13px}.prepare-editor input,.prepare-editor select{box-sizing:border-box;width:100%;min-width:0;border:1px solid #cdd7cf;border-radius:5px;padding:9px;background:white;color:inherit;font:inherit}.prepare-editor-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.prepare-editor small{color:#718079;font-size:12px;margin-top:-8px}.prepare-editor footer{border-top:1px solid #e2e5dd;justify-content:flex-end}.prepare-editor footer button{padding:7px 10px;border:1px solid #dfe4dc;border-radius:5px;background:white;color:inherit}.prepare-editor .prepare-delete{margin-right:auto;color:#b94f3f;background:transparent;border:0}
+.prepare-page button:focus-visible,.prepare-editor button:focus-visible{outline:2px solid #b94f3f;outline-offset:3px}
+@media(max-width:700px){.prepare-page{padding:18px 16px}.prepare-checklist{grid-template-columns:1fr;gap:26px}.prepare-toolbar{gap:10px}.prepare-filters{width:100%}.prepare-progress{margin-left:0;margin-right:auto}.prepare-heading{gap:8px}.prepare-heading nav{gap:0}.prepare-heading button{padding:8px}.prepare-reminder-note{align-items:flex-start}.prepare-reminder-note svg{flex-shrink:0}.prepare-task{padding:12px 0}}

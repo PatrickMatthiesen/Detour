@@ -52,6 +52,7 @@ import {
   previewTrip,
   saveTrip,
 } from "./api";
+import PreparePage from "./prepare/PreparePage";
 import { PlacesExplorer } from "./mockups/ConceptFour";
 import { displayPlaces, shortDate } from "./mockups/design-kit";
 import PlanPage from "./plan/PlanPage";
@@ -2305,7 +2306,6 @@ function DetourApp() {
   useEffect(()=>{getAuthSession().then(setSession).catch(error=>setSessionError(String(error)))},[]);
   const state = useTripState();
   const { pathname } = useLocation();
-  const [accommodation,setAccommodation] = useState<Booking|null>(null);
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Place|null>(null);
   const { snapshot } = state;
@@ -2315,7 +2315,7 @@ function DetourApp() {
     <nav aria-label="Main navigation">
       <Link to="/" aria-current={pathname === "/" ? "page" : undefined}>Places</Link>
       <Link to="/plan" aria-current={pathname === "/plan" ? "page" : undefined}>Plan</Link>
-      <Link to="/preparation">Prepare</Link>
+      <Link to="/preparation" aria-current={pathname === "/preparation" ? "page" : undefined}>Prepare</Link>
     </nav>
     {session?.authenticated && !session.localDevelopment && <button className="detour-account" onClick={()=>logout().then(()=>window.location.reload()).catch(error=>setSessionError(String(error)))}>Sign out</button>}
   </header>;
@@ -2323,19 +2323,18 @@ function DetourApp() {
   return <div className="detour-app">
     {sessionError && <div role="alert">{sessionError}</div>}
     {state.apiError && <div className="detour-save-error" role="alert">{state.apiError} <button onClick={state.retry}>Reload saved trip</button>{state.apiError.includes("401") && <a href="/auth/login?returnUrl=%2F">Sign in</a>}</div>}
-    {state.apiState === "loading" || (state.apiState === "live" && snapshot.version === 0) ? <>{header}<p role="status">Loading your trip…</p></> : state.apiState === "offline" ? <>{header}<p>Your trip could not be loaded. Retry above to continue.</p></> : pathname === "/plan" ? <div className="detour-plan-shell">{header}<PlanPage snapshot={snapshot} update={state.mutate} onAddAccommodation={(date,city)=>{const next=new Date(date+"T12:00:00Z");next.setUTCDate(next.getUTCDate()+1);setAccommodation({id:uid("booking"),kind:"hotel",title:"",status:"planned",location:city,checkIn:date,checkOut:next.toISOString().slice(0,10)});}}/></div> : <PlacesExplorer
+    {state.apiState === "loading" || (state.apiState === "live" && snapshot.version === 0) ? <>{header}<p role="status">Loading your trip…</p></> : state.apiState === "offline" ? <>{header}<p>Your trip could not be loaded. Retry above to continue.</p></> : pathname === "/plan" ? <div className="detour-plan-shell">{header}<PlanPage snapshot={snapshot} update={state.mutate}/></div> : pathname === "/preparation" ? <>{header}<PreparePage snapshot={snapshot} update={state.mutate}/></> : <PlacesExplorer
       trip={{...snapshot,places:displayPlaces(snapshot.places)}} selected={selected}
       toggle={id => state.mutate(current => ({...current,places:current.places.map(p=>p.id===id?{...p,selected:!p.selected}:p)}))}
       loading={false} error="" header={header} onAdd={()=>setAdding(true)}
       onEdit={place=>setEditing(snapshot.places.find(p=>p.id===place.id)??place)} />}
-    {accommodation && <BookingModal initial={accommodation} onClose={()=>setAccommodation(null)} onSave={booking=>{state.mutate(current=>({...current,bookings:[...current.bookings,booking]}));setAccommodation(null)}}/>}
     {adding && <AddPlaceModal onClose={()=>setAdding(false)} onAdd={place=>{state.mutate(current=>({...current,places:[...current.places,place]}));setAdding(false)}}/>}
     {editing && <EditPlaceModal place={editing} onClose={()=>setEditing(null)} onSave={place=>{state.mutate(current=>({...current,places:current.places.map(p=>p.id===place.id?place:p)}));setEditing(null)}}/>}
   </div>;
 }
 function RouteShell() {
   const { pathname } = useLocation();
-  if (pathname === "/" || pathname === "/plan") return <DetourApp />;
+  if (pathname === "/" || pathname === "/plan" || pathname === "/preparation") return <DetourApp />;
   return /^\/[1-9]\/?$/.test(pathname)
     ? <React.Suspense fallback={<p role="status">Loading design preview…</p>}><Outlet /></React.Suspense>
     : <App />;

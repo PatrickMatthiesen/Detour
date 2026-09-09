@@ -57,6 +57,6 @@ The development seed is personal local data and is not included in the public re
 
 Map markers for cities are explicitly approximate. Places without resolved coordinates remain in the list. Dashed area rings are illustrative planning regions, not city boundaries. Travel estimates are editable.
 
-The working app opens at `/` (Places) and `/plan`. The approved design preview remains at `/4`; numbered routes are experiments. City-stay editing and preparation still use the earlier interface.
+The working app opens at `/` (Places), `/plan` (daily planning and whole-trip calendar), and `/preparation` (checklist and packing). Plan includes city-route, journey and booking editors, compact place details and a full-size photo viewer. Prepare supports task due dates and in-app reminders, plus category- and bag-filtered packing. The approved design preview remains at `/4`; numbered routes are experiments.
 
 Photo sources, authors and licenses are listed in [photo credits](web/public/design-photos/ATTRIBUTION.md).

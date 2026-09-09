@@ -57,7 +57,7 @@ describe("daySummary", () => {
     expect(daySummary(state, "2026-10-05").cities).toEqual([]);
   });
 
-  it("falls back to place duration, counts unknowns, and does not count booking time", () => {
+  it("falls back to place duration, counts unknowns, and includes timed booking occupancy", () => {
     const state = snapshot({
       places: [{ id: "museum", name: "Museum", city: "Tokyo", durationMinutes: 120 }],
       activities: [
@@ -72,9 +72,10 @@ describe("daySummary", () => {
     });
 
     expect(daySummary(state, "2026-10-02")).toMatchObject({
-      knownMinutes: 180,
+      knownMinutes: 900,
       unknownDurations: 1,
-      remainingMinutes: 540,
+      unknownItems: ["a2"],
+      remainingMinutes: 0,
     });
   });
 
@@ -138,6 +139,82 @@ describe("daySummary", () => {
       ],
     });
 
-    expect(daySummary(state, "2026-10-02")).toMatchObject({ overlaps: true, unknownDurations: 1 });
+    expect(daySummary(state, "2026-10-02")).toMatchObject({ overlaps: true, unknownDurations: 1, conflicts: ["b", "c"] });
+  });
+
+  it("converts overnight booking offsets to trip-local dates and clips each day to 09:00–21:00", () => {
+    const state = snapshot({
+      bookings: [{
+        id: "overnight", kind: "rail", title: "Overnight rail", status: "confirmed",
+        start: "2026-10-01T20:00:00+09:00", end: "2026-10-02T10:00:00+09:00",
+      }, {
+        id: "walltime", kind: "ticket", title: "Walltime ticket", status: "confirmed",
+        start: "2026-10-02T20:00:00", end: "2026-10-02T22:00:00",
+      }],
+    });
+
+    expect(daySummary(state, "2026-10-01")).toMatchObject({ knownMinutes: 60, unknownDurations: 0 });
+    expect(daySummary(state, "2026-10-02")).toMatchObject({ knownMinutes: 120, unknownDurations: 0 });
+  });
+
+  it("unions touching timed items without double-counting and reports named conflicts", () => {
+    const state = snapshot({
+      activities: [
+        { id: "a", title: "Museum", placeId: null, date: "2026-10-02", startTime: "09:30", durationMinutes: 60 },
+        { id: "b", title: "Lunch", placeId: null, date: "2026-10-02", startTime: "10:30", durationMinutes: 30 },
+      ],
+      bookings: [{
+        id: "ticket", kind: "ticket", title: "Museum ticket", status: "confirmed", date: "2026-10-02",
+        start: "2026-10-02T09:00:00+09:00", end: "2026-10-02T09:30:00+09:00",
+      }],
+    });
+
+    expect(daySummary(state, "2026-10-02")).toMatchObject({
+      knownMinutes: 120,
+      overlaps: false,
+      conflicts: [],
+    });
+  });
+
+  it("includes activity and booking conflicts while ignoring cancelled timed items", () => {
+    const state = snapshot({
+      activities: [
+        { id: "tour", title: "Guided tour", placeId: null, date: "2026-10-02", startTime: "10:00", durationMinutes: 60 },
+        { id: "cancelled-activity", title: "Cancelled activity", placeId: null, date: "2026-10-02", startTime: "10:15", durationMinutes: 120, status: "cancelled" },
+      ],
+      bookings: [
+        {
+          id: "reservation", kind: "ticket", title: "Museum reservation", status: "confirmed", date: "2026-10-02",
+          start: "2026-10-02T10:30:00+09:00", end: "2026-10-02T11:30:00+09:00",
+        },
+        {
+          id: "cancelled-booking", kind: "ticket", title: "Cancelled booking", status: "cancelled", date: "2026-10-02",
+        },
+      ],
+    });
+
+    expect(daySummary(state, "2026-10-02")).toMatchObject({
+      knownMinutes: 90,
+      unknownDurations: 0,
+      overlaps: true,
+      conflicts: ["Guided tour", "Museum reservation"],
+    });
+  });
+
+  it("counts untimed durations and unknown nonhotel bookings once per day while excluding hotels", () => {
+    const state = snapshot({
+      activities: [{ id: "a", title: "Temple", placeId: null, date: "2026-10-02", durationMinutes: 90 }],
+      travelLegs: [{ id: "leg", from: "Tokyo", to: "Kyoto", date: "2026-10-02" }],
+      bookings: [
+        { id: "unknown", kind: "ticket", title: "Open ticket", status: "confirmed", date: "2026-10-02" },
+        { id: "hotel", kind: "hotel", title: "Hotel", status: "confirmed", date: "2026-10-02" },
+      ],
+    });
+
+    expect(daySummary(state, "2026-10-02")).toMatchObject({
+      knownMinutes: 90,
+      unknownDurations: 2,
+      unknownItems: ["Tokyo → Kyoto", "Open ticket"],
+    });
   });
 });

@@ -6,6 +6,8 @@ The local Aspire graph and generated Compose bundle are separate from a live dep
 
 Browser and ChatGPT → Cloudflare HTTPS → existing cloudflared connector → web gateway → API → PostgreSQL.
 
+The selected hostname for this installation is `detour.bmstack.net`; the intended MCP URL is `https://detour.bmstack.net/mcp`. This records the deployment target, not a verified live deployment. Server access and Google OAuth configuration are still required.
+
 Use one hostname. The web gateway serves static files and forwards `/api`, `/auth`, `/connect`, `/signin-google`, `/.well-known`, and `/mcp` to the API. A tunnel route maps the public hostname to the local service; see [Cloudflare Tunnel setup](https://developers.cloudflare.com/tunnel/setup/). The supplied override binds web to `127.0.0.1:8080` for a connector running on the same server. A connector running in a container needs the matching private Docker network/service address instead of its own localhost.
 
 The application owns authentication. Do not place an interactive Cloudflare Access challenge in front of MCP/discovery/token routes: ChatGPT must be able to reach the OAuth endpoints and then use its issued bearer token. This does not require making trip data anonymous.

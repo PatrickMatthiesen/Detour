@@ -184,40 +184,13 @@ const bookingDetails = (booking: TripSnapshot["bookings"][number], timeZone: str
   return `${name}${metadata ? ` · ${metadata}` : ""}${when ? ` · ${when}` : ""}`;
 };
 
-const activityOverlapNames = (snapshot: TripSnapshot, activities: TripSnapshot["activities"][number][]) => {
-  const timed = activities.flatMap((activity) => {
-    const duration = activityDuration(snapshot, activity);
-    if (!activity.startTime || duration === null) return [];
-    const match = /^(\d{1,2}):(\d{2})(?::\d{2})?$/.exec(activity.startTime.trim());
-    if (!match) return [];
-    const hours = Number(match[1]);
-    const minutes = Number(match[2]);
-    if (hours > 23 || minutes > 59) return [];
-    return [{ activity, start: hours * 60 + minutes, end: hours * 60 + minutes + duration }];
-  });
-  const pairs: string[] = [];
-  for (let first = 0; first < timed.length; first++) {
-    for (let second = first + 1; second < timed.length; second++) {
-      if (timed[first].start < timed[second].end && timed[second].start < timed[first].end) {
-        const names = [activityName(snapshot, timed[first].activity), activityName(snapshot, timed[second].activity)];
-        const pair = names.join(" and ");
-        if (!pairs.includes(pair)) pairs.push(pair);
-      }
-    }
-  }
-  return pairs;
-};
-
 function indicatorCopy(snapshot: TripSnapshot, date: string) {
   const summary = daySummary(snapshot, date);
   const activityNames = summary.activities.map((activity) => activityName(snapshot, activity));
   const travelNames = summary.travelLegs.map((leg) => `${leg.from} to ${leg.to}`);
   const bookingNames = summary.bookings.map((booking) => booking.title || "Untitled booking");
   const state = accommodationState(snapshot, date, summary.accommodationCovered);
-  const unknownNames = [
-    ...summary.activities.filter((activity) => activityDuration(snapshot, activity) === null).map((activity) => activityName(snapshot, activity)),
-    ...summary.travelLegs.filter((leg) => formatDuration(leg.durationMinutes) === null).map((leg) => `${leg.from} to ${leg.to}`),
-  ];
+  const unknownNames = summary.unknownItems;
   const coveredBookings = snapshot.bookings.filter((booking) =>
     !booking.status?.toLowerCase().includes("cancel") &&
     isConfirmed(booking.status) &&
@@ -226,7 +199,7 @@ function indicatorCopy(snapshot: TripSnapshot, date: string) {
     (localDateForTimestamp(booking.checkIn, snapshot.trip.timeZone) || "") <= date &&
     date < (localDateForTimestamp(booking.checkOut, snapshot.trip.timeZone) || ""),
   );
-  const overlapNames = activityOverlapNames(snapshot, summary.activities);
+  const overlapNames = summary.conflicts;
 
   return {
     summary,
@@ -480,7 +453,7 @@ export function DayIndicators({
     summary.unknownDurations > 0 ? {
       kind: "unknown" as const,
       count: summary.unknownDurations,
-      label: `${summary.unknownDurations} activity or travel item with unknown duration`,
+      label: `${summary.unknownDurations} item${summary.unknownDurations === 1 ? "" : "s"} with unknown duration`,
       heading: "Unknown durations",
       details: unknownNames,
       text: "time unknown",
@@ -488,9 +461,9 @@ export function DayIndicators({
     summary.overlaps ? {
       kind: "overlap" as const,
       count: undefined,
-      label: "Overlapping scheduled activities",
-      heading: "Overlapping activities",
-      details: overlapNames.length ? overlapNames : ["Scheduled activities overlap."],
+      label: "Overlapping scheduled items",
+      heading: "Overlapping items",
+      details: overlapNames.length ? overlapNames : ["Scheduled items overlap."],
       text: "overlap",
     } : null,
   ].filter((item): item is NonNullable<typeof item> => item !== null);
@@ -518,7 +491,7 @@ function dayAriaLabel(snapshot: TripSnapshot, date: string) {
     summary.travelLegs.length ? joinItems(summary.travelLegs.length, "travel leg", travelNames) : null,
     state === "missing" ? "Accommodation missing" : state === "covered" ? "Accommodation covered" : null,
     summary.unknownDurations ? `${summary.unknownDurations} item with unknown duration` : null,
-    summary.overlaps ? "Overlapping scheduled activities" : null,
+    summary.overlaps ? "Overlapping scheduled items" : null,
   ].filter(Boolean);
   return `${dateInfo(date).label}. ${details.length ? details.join(". ") : "No scheduled items."}`;
 }

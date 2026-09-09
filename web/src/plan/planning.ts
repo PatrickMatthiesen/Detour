@@ -10,8 +10,11 @@ export interface DaySummary {
   bookings: Booking[];
   knownMinutes: number;
   unknownDurations: number;
+  unknownItems: string[];
   remainingMinutes: number;
   overlaps: boolean;
+  conflicts: string[];
+  calculationNotes: string[];
   accommodationCovered: boolean;
 }
 
@@ -53,20 +56,64 @@ export function daySummary(snapshot: TripSnapshot, date: string): DaySummary {
     addCity(leg.to);
   }
 
-  let knownMinutes = 0;
+  let untimedMinutes = 0;
   let unknownDurations = 0;
-  const activityDurations = new Map<string, number | null>();
+  const unknownItems: string[] = [];
+  const calculationNotes: string[] = [];
+  const timedIntervals: TimedInterval[] = [];
   for (const activity of activities) {
     const duration = activityDuration(snapshot, activity);
-    activityDurations.set(activity.id, duration);
-    if (duration === null) unknownDurations++;
-    else knownMinutes += duration;
+    if (duration === null) {
+      unknownDurations++;
+      unknownItems.push(activityName(snapshot, activity));
+      continue;
+    }
+
+    const start = parseLocalTime(activity.startTime);
+    if (start === null) {
+      untimedMinutes += duration;
+      if (activity.startTime?.trim()) {
+        calculationNotes.push(`Activity "${activityName(snapshot, activity)}" has an invalid start time; counted as untimed.`);
+      } else {
+        calculationNotes.push(`Activity "${activityName(snapshot, activity)}" has no start time; counted as untimed.`);
+      }
+    } else {
+      timedIntervals.push({
+        name: activityName(snapshot, activity),
+        start,
+        end: start + duration,
+        kind: "activity",
+      });
+    }
   }
   for (const leg of travelLegs) {
     const duration = validDuration(leg.durationMinutes);
-    if (duration === null) unknownDurations++;
-    else knownMinutes += duration;
+    if (duration === null) {
+      unknownDurations++;
+      unknownItems.push(`${leg.from} → ${leg.to}`);
+    }
+    else {
+      untimedMinutes += duration;
+      calculationNotes.push(`Travel "${leg.from} → ${leg.to}" has no clock time; counted as untimed.`);
+    }
   }
+
+  for (const booking of bookings) {
+    if (isAccommodationBooking(booking)) continue;
+    const interval = bookingInterval(booking, snapshot.trip.timeZone, date);
+    if (interval === null) {
+      unknownDurations++;
+      unknownItems.push(bookingName(booking));
+      calculationNotes.push(`Booking "${bookingName(booking)}" has no complete timed interval; duration is unknown.`);
+    } else if (interval) {
+      timedIntervals.push({ name: bookingName(booking), ...interval, kind: "booking" });
+    }
+  }
+
+  const conflicts = findConflicts(timedIntervals);
+  const timedMinutes = unionMinutes(timedIntervals);
+  const knownMinutes = timedMinutes + untimedMinutes;
+  addDuplicateNotes(calculationNotes, activities, bookings, snapshot);
 
   return {
     cities,
@@ -75,8 +122,11 @@ export function daySummary(snapshot: TripSnapshot, date: string): DaySummary {
     bookings,
     knownMinutes,
     unknownDurations,
+    unknownItems,
     remainingMinutes: Math.max(0, PLANNING_WINDOW_MINUTES - knownMinutes),
-    overlaps: hasActivityOverlap(activities, activityDurations),
+    overlaps: conflicts.length > 0,
+    conflicts,
+    calculationNotes,
     accommodationCovered: snapshot.bookings.some(
       (booking) =>
         !isCancelled(booking.status) &&
@@ -188,22 +238,137 @@ function localDateForTimestamp(value: string | null | undefined, timeZone: strin
   }
 }
 
-function hasActivityOverlap(activities: Activity[], durations: Map<string, number | null>): boolean {
-  const timed = activities.flatMap((activity) => {
-    const duration = durations.get(activity.id);
-    if (!activity.startTime || duration === null || duration === undefined) return [];
-    const match = /^(\d{1,2}):(\d{2})(?::\d{2})?$/.exec(activity.startTime.trim());
-    if (!match) return [];
-    const hours = Number(match[1]);
-    const minutes = Number(match[2]);
-    if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return [];
-    const start = hours * 60 + minutes;
-    return [{ start, end: start + duration }];
-  });
-  for (let first = 0; first < timed.length; first++) {
-    for (let second = first + 1; second < timed.length; second++) {
-      if (timed[first].start < timed[second].end && timed[second].start < timed[first].end) return true;
+interface TimedInterval {
+  name: string;
+  start: number;
+  end: number;
+  kind: "activity" | "booking";
+}
+
+interface LocalTimestamp {
+  date: string;
+  minute: number;
+}
+
+function parseLocalTime(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const match = /^(\d{1,2}):(\d{2})(?::\d{2})?$/.exec(value.trim());
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  return hours <= 23 && minutes <= 59 ? hours * 60 + minutes : null;
+}
+
+function parseTimestamp(value: string | null | undefined, timeZone: string | null | undefined): LocalTimestamp | null {
+  if (!value || DATE_ONLY.test(value)) return null;
+  const trimmed = value.trim();
+  if (!/(?:Z|[+-]\d{2}:?\d{2})$/i.test(trimmed)) {
+    const match = /^(\d{4}-\d{2}-\d{2})T(\d{1,2}):(\d{2})(?::\d{2})?(?:\.\d+)?$/.exec(trimmed);
+    if (!match || parseDateOnly(match[1]) === null) return null;
+    const minute = Number(match[2]) * 60 + Number(match[3]);
+    return Number(match[2]) <= 23 && Number(match[3]) <= 59 ? { date: match[1], minute } : null;
+  }
+
+  const instant = Date.parse(trimmed);
+  if (!Number.isFinite(instant)) return null;
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: timeZone?.trim() || "Asia/Tokyo",
+      hourCycle: "h23",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).formatToParts(new Date(instant));
+    const valueFor = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value;
+    const year = valueFor("year");
+    const month = valueFor("month");
+    const day = valueFor("day");
+    const hour = valueFor("hour");
+    const minute = valueFor("minute");
+    if (!year || !month || !day || !hour || !minute) return null;
+    return { date: `${year}-${month}-${day}`, minute: Number(hour) * 60 + Number(minute) };
+  } catch {
+    return null;
+  }
+}
+
+function bookingInterval(
+  booking: Booking,
+  timeZone: string | null | undefined,
+  date: string,
+): Omit<TimedInterval, "name" | "kind"> | null | undefined {
+  if (!booking.start || !booking.end) return null;
+  const start = parseTimestamp(booking.start, timeZone);
+  const end = parseTimestamp(booking.end, timeZone);
+  if (!start || !end) return null;
+  const startMinute = minutesFromDate(date, start);
+  const endMinute = minutesFromDate(date, end);
+  if (endMinute < startMinute) return null;
+  if (endMinute <= 0 || startMinute >= 24 * 60) return undefined;
+  return { start: startMinute, end: endMinute };
+}
+
+function minutesFromDate(date: string, timestamp: LocalTimestamp): number {
+  const day = parseDateOnly(date);
+  const timestampDay = parseDateOnly(timestamp.date);
+  if (day === null || timestampDay === null) return timestamp.minute;
+  return Math.round((timestampDay - day) / 60_000) + timestamp.minute;
+}
+
+function unionMinutes(intervals: TimedInterval[]): number {
+  const windowStart = 9 * 60;
+  const windowEnd = 21 * 60;
+  const clipped = intervals
+    .map(({ start, end }) => ({ start: Math.max(windowStart, start), end: Math.min(windowEnd, end) }))
+    .filter((interval) => interval.start < interval.end)
+    .sort((first, second) => first.start - second.start || first.end - second.end);
+  let total = 0;
+  let current: { start: number; end: number } | undefined;
+  for (const interval of clipped) {
+    if (!current) current = interval;
+    else if (interval.start <= current.end) current.end = Math.max(current.end, interval.end);
+    else {
+      total += current.end - current.start;
+      current = interval;
     }
   }
-  return false;
+  return total + (current ? current.end - current.start : 0);
+}
+
+function findConflicts(intervals: TimedInterval[]): string[] {
+  const conflicting = new Set<string>();
+  for (let first = 0; first < intervals.length; first++) {
+    for (let second = first + 1; second < intervals.length; second++) {
+      if (intervals[first].start < intervals[second].end && intervals[second].start < intervals[first].end) {
+        conflicting.add(intervals[first].name);
+        conflicting.add(intervals[second].name);
+      }
+    }
+  }
+  return intervals.filter((interval) => conflicting.has(interval.name)).map((interval) => interval.name)
+    .filter((name, index, names) => names.indexOf(name) === index);
+}
+
+function activityName(snapshot: TripSnapshot, activity: Activity): string {
+  return activity.title?.trim() || snapshot.places.find((place) => place.id === activity.placeId)?.name?.trim() || activity.id;
+}
+
+function bookingName(booking: Booking): string {
+  return booking.title?.trim() || booking.kind.trim() || booking.id;
+}
+
+function addDuplicateNotes(notes: string[], activities: Activity[], bookings: Booking[], snapshot: TripSnapshot): void {
+  const activityNames = new Set(activities.map((activity) => activityName(snapshot, activity).toLowerCase()));
+  const noted = new Set<string>();
+  for (const booking of bookings) {
+    if (isAccommodationBooking(booking)) continue;
+    const name = bookingName(booking);
+    const normalized = name.toLowerCase();
+    if (activityNames.has(normalized) && !noted.has(normalized)) {
+      notes.push(`Possible duplicate activity/booking named "${name}".`);
+      noted.add(normalized);
+    }
+  }
 }

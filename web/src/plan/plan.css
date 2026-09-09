@@ -386,3 +386,9 @@
 .plan-place-row.no-photo .plan-place-meta{padding-right:42px;margin-top:4px;line-height:1.4;}
 .plan-place-row.no-photo .plan-place-copy p{margin-top:5px;}
 @media(max-width:640px){.plan-stays-label{padding-top:0;margin-bottom:0;align-items:center;}.plan-stay-list{grid-template-columns:1fr;}.plan-stays.is-expanded .plan-stay-list{margin-top:8px;}.plan-stay:not(:last-child)::after{content:none;}.plan-day-title h1{font-size:22px;}}
+
+.plan-booking-link{font:inherit;font-weight:700;color:#a43c32;background:transparent;border:0;padding:0;text-align:left;cursor:pointer;}.plan-commitment-copy .plan-booking-link{font-size:14px;color:var(--plan-ink);}.plan-booking-link:hover{text-decoration:underline;}
+
+.plan-commitment-tools{display:flex;gap:14px;font-size:12px;}.plan-place-detail-link{font:inherit;font-size:15px;font-weight:700;line-height:1.28;text-align:left;padding:0;border:0;background:transparent;color:var(--plan-ink);cursor:pointer;}.plan-place-detail-link:hover{text-decoration:underline;}
+
+.plan-time-details{font-size:12px;color:var(--plan-muted);margin-top:10px;line-height:1.5;}.plan-time-details summary{cursor:pointer;display:flex;gap:5px;align-items:center;}.plan-time-details p{margin-top:6px;}.plan-conflict{font-size:12px;color:#a43c32;padding-top:8px;}

@@ -1,0 +1,63 @@
+.travel-editor {
+  --travel-ink: #273535;
+  --travel-muted: #687875;
+  --travel-line: #dfe4dc;
+  --travel-paper: #fbfaf6;
+  --travel-coral: #b94f3f;
+  margin: auto;
+  width: min(690px, calc(100vw - 28px));
+  max-height: calc(100dvh - 40px);
+  padding: 0;
+  overflow: auto;
+  border: 1px solid var(--travel-line);
+  border-radius: 10px;
+  background: var(--travel-paper);
+  color: var(--travel-ink);
+  font: 14px "IBM Plex Sans", Inter, ui-sans-serif, system-ui, sans-serif;
+  box-shadow: 0 20px 70px #26352b30;
+}
+
+.travel-editor::backdrop { background: #25342d66; }
+.travel-editor *, .travel-editor *::before, .travel-editor *::after { box-sizing: border-box; }
+.travel-editor button, .travel-editor input { font: inherit; }
+.travel-editor button { cursor: pointer; }
+.travel-editor button:focus-visible, .travel-editor input:focus-visible { outline: 3px solid #b94f3f4d; outline-offset: 2px; }
+.travel-editor-header, .travel-editor-footer { align-items: center; display: flex; gap: 16px; justify-content: space-between; padding: 16px 20px; }
+.travel-editor-header { position: sticky; top: 0; z-index: 1; border-bottom: 1px solid var(--travel-line); background: var(--travel-paper); }
+.travel-editor-header h2 { margin: 0; font: 700 21px/1.2 Lato, Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: -.02em; }
+.travel-editor-icon { align-items: center; display: inline-flex; flex: none; justify-content: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: #58765f; }
+.travel-editor-icon:hover { background: #e4eee5; }
+.travel-editor-fields { display: flex; flex-direction: column; gap: 16px; padding: 20px; }
+.travel-editor-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.travel-editor label { display: flex; flex-direction: column; min-width: 0; gap: 7px; color: #354743; font-size: 13px; }
+.travel-editor input:not([type="checkbox"]) { width: 100%; min-width: 0; border: 1px solid #cbd5cd; border-radius: 5px; padding: 9px; background: #fff; color: var(--travel-ink); }
+.travel-editor input[aria-invalid="true"] { border-color: var(--travel-coral); }
+.travel-editor-optional { color: var(--travel-muted); font-size: 12px; font-weight: 400; }
+.travel-editor-check { align-self: end; flex-direction: row !important; align-items: center; min-height: 39px; }
+.travel-editor-check input { accent-color: var(--travel-coral); margin: 0 2px 0 0; }
+.travel-editor-remove { align-self: start; padding: 0; border: 0; background: transparent; color: #ac4538; text-decoration: underline; }
+.travel-editor-errors { margin: 12px 20px 0; padding: 11px 14px; border-radius: 5px; background: #fae9e3; color: #9b392d; font-size: 13px; line-height: 1.45; }
+.travel-editor-errors strong { font-weight: 700; }
+.travel-editor-errors ul { margin: 5px 0 0; padding-left: 18px; }
+.travel-editor-errors li + li { margin-top: 3px; }
+.travel-editor-confirm { padding: 28px 20px; }
+.travel-editor-confirm h3 { margin: 0 0 8px; font: 700 16px/1.3 Lato, Inter, ui-sans-serif, system-ui, sans-serif; }
+.travel-editor-confirm p { margin: 0; color: var(--travel-muted); font-size: 13px; line-height: 1.5; }
+.travel-editor-confirm-actions { display: flex; gap: 8px; margin-top: 24px; }
+.travel-editor-confirm-actions button, .travel-editor-footer button { padding: 9px 14px; border: 1px solid #cbd5cd; border-radius: 5px; background: #fff; color: #354743; }
+.travel-editor-confirm-actions .travel-editor-danger { border-color: var(--travel-coral); background: var(--travel-coral); color: #fff; }
+.travel-editor-footer { position: sticky; bottom: 0; z-index: 1; border-top: 1px solid var(--travel-line); background: var(--travel-paper); }
+.travel-editor-footer .travel-editor-primary { border-color: var(--travel-coral); background: var(--travel-coral); color: #fff; }
+
+@media (max-width: 600px) {
+  .travel-editor { width: min(100vw - 20px, 690px); max-height: calc(100dvh - 24px); }
+  .travel-editor-header, .travel-editor-footer { padding: 13px 16px; }
+  .travel-editor-fields { gap: 14px; padding: 16px; }
+  .travel-editor-grid { grid-template-columns: 1fr; gap: 14px; }
+  .travel-editor-errors { margin: 10px 16px 0; }
+  .travel-editor-check { align-self: start; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .travel-editor * { scroll-behavior: auto; transition: none !important; }
+}
