@@ -45,11 +45,11 @@ if (builder.ExecutionContext.IsPublishMode)
     var publicUrl = builder.Configuration["Detour:PublicUrl"] ?? "https://detour.patrickbm.com";
     api.WithEndpoint("http", endpoint =>
         {
-            endpoint.Port = 8080;
+            endpoint.Port = 48327;
             endpoint.TargetPort = 8080;
         })
         .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Production")
-        // The only published port is loopback-bound for the host's cloudflared.
+        // Cloudflared runs on another VM on the trusted local network.
         .WithEnvironment("ASPNETCORE_FORWARDEDHEADERS_ENABLED", "true")
         .WithEnvironment("Auth__AllowLocalDev", "false")
         .WithEnvironment("Auth__PublicUrl", publicUrl)
@@ -64,9 +64,8 @@ if (builder.ExecutionContext.IsPublishMode)
         .PublishAsDockerComposeService((_, service) =>
         {
             service.Restart = "unless-stopped";
-            // Compose's host-IP binding is not represented by EndpointAnnotation.
-            service.Ports.Clear();
-            service.Ports.Add("127.0.0.1:8080:8080");
+            // Keep the explicit host port; omit Aspire's random-port mapping.
+            service.Ports.RemoveAll(port => !port.Contains(':'));
             // These paths belong to the target Docker host, not the CI runner.
             service.Volumes.Add(new()
             {

@@ -34,7 +34,7 @@ Set these values as secrets or deployment configuration. Environment variable na
 }
 ```
 
-`Auth:PublicUrl` is the canonical HTTPS issuer and must match the externally visible API origin. The supplied deployment exposes HTTP only on localhost for the host's Cloudflare Tunnel and enables forwarded headers there. For a different proxy setup, configure `Auth:TrustedProxies` with the immediate proxy IPs and disable the broad `ASPNETCORE_FORWARDEDHEADERS_ENABLED` switch. Do not expose an ingress that trusts forwarded headers directly to untrusted clients.
+`Auth:PublicUrl` is the canonical HTTPS issuer and must match the externally visible API origin. The supplied deployment publishes HTTP on host port 48327 for Cloudflare Tunnel running on another VM. It enables forwarded headers and assumes a trusted local network, with access managed by the firewall. Deployments requiring a proxy allowlist can configure `Auth:TrustedProxies` and disable `ASPNETCORE_FORWARDEDHEADERS_ENABLED`.
 
 ## Automatic OAuth keys
 

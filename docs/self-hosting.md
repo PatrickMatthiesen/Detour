@@ -2,7 +2,7 @@
 
 Development runs Vite, the API, and PostgreSQL through Aspire. Production uses `api.PublishWithContainerFiles(web, "/app/wwwroot")`: the API container serves the built React app as well as API, login, and MCP endpoints. There is no separate frontend gateway or Compose override.
 
-Traffic: browser/ChatGPT → Cloudflare HTTPS → cloudflared on the server → Detour API at `127.0.0.1:8080` → PostgreSQL. The database has no published host port, and the production Aspire dashboard is disabled. The API accepts forwarded HTTPS headers on this loopback-only ingress; keep the Docker network private. Do not expose that HTTP port publicly.
+Traffic: browser/ChatGPT → Cloudflare HTTPS → cloudflared on the proxy VM → Docker VM port `48327` → Detour API → PostgreSQL. Docker publishes `48327:8080` on all host interfaces. The API accepts forwarded HTTPS headers from the trusted local network; network access is managed by the firewall. The database has no published host port, and the production Aspire dashboard is disabled.
 
 ## GitHub Actions
 
@@ -27,10 +27,10 @@ Configure the GitHub **Production** environment:
 
 ## Server setup
 
-1. Provide Docker/Compose and curl, join the tailnet, and authorize the CI node to SSH as the deployment user, as for Cantaro. Port 8080 must be free.
+1. Provide Docker/Compose and curl, join the tailnet, and authorize the CI node to SSH as the deployment user, as for Cantaro. Host port 48327 must be free.
 2. Create the persistent keys directory (default `/srv/detour/keys`) and grant the API container user write access. Detour generates and renews OAuth credentials there automatically and also persists browser cookie keys. No certificates or passwords need to be copied or configured. See [authentication](authentication.md). This bind-mount path refers to the server, not the GitHub runner.
 3. Configure Google's callback as `https://detour.patrickbm.com/signin-google`.
-4. Run **Deploy Detour** from Actions, then point the hostname's Cloudflare Tunnel route to `http://127.0.0.1:8080` on the same server. Do not put an interactive Cloudflare Access challenge in front of OAuth/MCP routes.
+4. Run **Deploy Detour** from Actions, then point the hostname's Cloudflare Tunnel route to `http://<docker-vm-lan-ip>:48327` from the proxy VM. Do not put an interactive Cloudflare Access challenge in front of OAuth/MCP routes.
 5. Verify Google login, rejected users, OAuth discovery, and a ChatGPT read/write round trip. The workflow checks local HTTP health; external OAuth still needs this first-deployment check.
 
 Production uses Compose project `detour` and persistent PostgreSQL storage derived from `detour-postgres-data`. Keep backups of the database and authentication keys. Do not delete volumes during updates. Production does not import the private development seed automatically.
