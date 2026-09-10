@@ -2,12 +2,16 @@ using System.Net;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
+using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Npgsql;
 using Detour.Api;
@@ -256,6 +260,45 @@ public sealed class PostgresIntegrationTests : IAsyncLifetime
             Assert.False(json.GetProperty("googleConfigured").GetBoolean());
         }
         finally { Environment.SetEnvironmentVariable("ConnectionStrings__tripdb", previous); }
+    }
+
+    [Fact]
+    public async Task Google_login_challenge_preserves_identity_external_login_provider()
+    {
+        if (!HasDatabase()) return;
+        var previousConnection = Environment.GetEnvironmentVariable("ConnectionStrings__tripdb");
+        var previousClientId = Environment.GetEnvironmentVariable("Auth__Google__ClientId");
+        var previousClientSecret = Environment.GetEnvironmentVariable("Auth__Google__ClientSecret");
+        Environment.SetEnvironmentVariable("ConnectionStrings__tripdb", connection);
+        Environment.SetEnvironmentVariable("Auth__Google__ClientId", "regression-client");
+        Environment.SetEnvironmentVariable("Auth__Google__ClientSecret", "regression-secret");
+        try
+        {
+            using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.UseEnvironment("Development"));
+            using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+            {
+                BaseAddress = new Uri("http://localhost"),
+                AllowAutoRedirect = false
+            });
+
+            using var response = await client.GetAsync("/auth/login?returnUrl=%2Fplan");
+            Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+            var location = Assert.IsType<Uri>(response.Headers.Location);
+            var state = QueryHelpers.ParseQuery(location.Query)["state"].ToString();
+            Assert.False(string.IsNullOrWhiteSpace(state));
+
+            var googleOptions = factory.Services.GetRequiredService<IOptionsMonitor<GoogleOptions>>().Get(GoogleDefaults.AuthenticationScheme);
+            var properties = googleOptions.StateDataFormat.Unprotect(state);
+            Assert.NotNull(properties);
+            Assert.Equal(GoogleDefaults.AuthenticationScheme, properties!.Items["LoginProvider"]);
+            Assert.Equal("/auth/callback?returnUrl=%2Fplan", properties.RedirectUri);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("ConnectionStrings__tripdb", previousConnection);
+            Environment.SetEnvironmentVariable("Auth__Google__ClientId", previousClientId);
+            Environment.SetEnvironmentVariable("Auth__Google__ClientSecret", previousClientSecret);
+        }
     }
 
     [Fact]

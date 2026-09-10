@@ -213,12 +213,13 @@ app.MapGet("/.well-known/oauth-protected-resource", (HttpRequest request) =>
     return Results.Ok(new { resource, authorization_servers = string.IsNullOrWhiteSpace(issuer) ? Array.Empty<string>() : new[] { issuer } });
 });
 app.MapGet("/.well-known/oauth-protected-resource/mcp", (HttpRequest request) => Results.Ok(new { resource = $"{request.Scheme}://{request.Host}/mcp", authorization_servers = string.IsNullOrWhiteSpace(issuer) ? Array.Empty<string>() : new[] { issuer! } }));
-app.MapGet("/auth/login", (HttpRequest request) =>
+app.MapGet("/auth/login", (HttpRequest request, SignInManager<ApplicationUser> signInManager) =>
 {
     if (string.IsNullOrWhiteSpace(googleClientId) || string.IsNullOrWhiteSpace(googleClientSecret))
         return Results.Problem("Google OAuth is not configured. Set Auth:Google:ClientId and Auth:Google:ClientSecret.", statusCode: StatusCodes.Status503ServiceUnavailable);
     var returnUrl = SafeReturnUrl(request.Query["returnUrl"].ToString()) ?? "/";
-    var properties = new AuthenticationProperties { RedirectUri = $"/auth/callback?returnUrl={Uri.EscapeDataString(returnUrl)}" };
+    var properties = signInManager.ConfigureExternalAuthenticationProperties(
+        GoogleDefaults.AuthenticationScheme, $"/auth/callback?returnUrl={Uri.EscapeDataString(returnUrl)}");
     return Results.Challenge(properties, [GoogleDefaults.AuthenticationScheme]);
 });
 app.MapGet("/auth/callback", async (HttpContext context, SignInManager<ApplicationUser> signInManager, UserManager<ApplicationUser> userManager, HttpRequest request) =>
