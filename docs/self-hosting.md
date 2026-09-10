@@ -17,24 +17,22 @@ Configure the GitHub **Production** environment:
 | `POSTGRES_PASSWORD` | Persistent database password; retain across deployments |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google web OAuth client |
 | `OWNER_EMAIL` | Allowed Google account |
-| `SIGNING_CERTIFICATE_PASSWORD`, `ENCRYPTION_CERTIFICATE_PASSWORD` | Passwords for the server's persistent PFX files |
 
 | Variables | Value |
 | --- | --- |
 | `CHATGPT_CLIENT_ID` | Registered ChatGPT OAuth client ID |
 | `CHATGPT_REDIRECT_URI` | Exact callback supplied by ChatGPT |
-| `PUBLIC_URL` | Defaults to `https://detour.bmstack.net` |
-| `AUTH_CERTIFICATES_DIR` | Server directory, default `/srv/detour/certificates` |
+| `PUBLIC_URL` | Defaults to `https://detour.patrickbm.com` |
 | `AUTH_KEYS_DIR` | Server directory, default `/srv/detour/keys` |
 
 ## Server setup
 
 1. Provide Docker/Compose and curl, join the tailnet, and authorize the CI node to SSH as the deployment user, as for Cantaro. Port 8080 must be free.
-2. Place persistent `signing.pfx` and `encryption.pfx` in the certificates directory. Create the cookie-key directory. The API container user must be able to read the certificates and write cookie keys. See [authentication](authentication.md). These bind-mount paths refer to the server, not the GitHub runner.
-3. Configure Google's callback as `https://detour.bmstack.net/signin-google`.
+2. Create the persistent keys directory (default `/srv/detour/keys`) and grant the API container user write access. Detour generates and renews OAuth credentials there automatically and also persists browser cookie keys. No certificates or passwords need to be copied or configured. See [authentication](authentication.md). This bind-mount path refers to the server, not the GitHub runner.
+3. Configure Google's callback as `https://detour.patrickbm.com/signin-google`.
 4. Run **Deploy Detour** from Actions, then point the hostname's Cloudflare Tunnel route to `http://127.0.0.1:8080` on the same server. Do not put an interactive Cloudflare Access challenge in front of OAuth/MCP routes.
 5. Verify Google login, rejected users, OAuth discovery, and a ChatGPT read/write round trip. The workflow checks local HTTP health; external OAuth still needs this first-deployment check.
 
 Production uses Compose project `detour` and persistent PostgreSQL storage derived from `detour-postgres-data`. Keep backups of the database and authentication keys. Do not delete volumes during updates. Production does not import the private development seed automatically.
 
-Deployment has not yet been exercised on the target server. Server credentials, certificate provisioning, and the tunnel route are configured when ready to deploy.
+Deployment has not yet been exercised on the target server. Server credentials, the writable keys directory, and the tunnel route are configured when ready to deploy.

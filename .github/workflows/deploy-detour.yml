@@ -70,10 +70,7 @@ jobs:
           Parameters__OwnerEmail: ${{ secrets.OWNER_EMAIL }}
           Parameters__ChatGptClientId: ${{ vars.CHATGPT_CLIENT_ID }}
           Parameters__ChatGptRedirectUri: ${{ vars.CHATGPT_REDIRECT_URI }}
-          Parameters__SigningCertificatePassword: ${{ secrets.SIGNING_CERTIFICATE_PASSWORD }}
-          Parameters__EncryptionCertificatePassword: ${{ secrets.ENCRYPTION_CERTIFICATE_PASSWORD }}
-          Detour__PublicUrl: ${{ vars.PUBLIC_URL || 'https://detour.bmstack.net' }}
-          Detour__CertificatesDirectory: ${{ vars.AUTH_CERTIFICATES_DIR || '/srv/detour/certificates' }}
+          Detour__PublicUrl: ${{ vars.PUBLIC_URL || 'https://detour.patrickbm.com' }}
           Detour__KeysDirectory: ${{ vars.AUTH_KEYS_DIR || '/srv/detour/keys' }}
         run: |
           docker context create "$DOCKER_CONTEXT_NAME" --docker "host=ssh://$DEPLOY_USER@$DEPLOY_HOST"

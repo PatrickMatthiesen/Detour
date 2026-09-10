@@ -1,5 +1,4 @@
 using System.Security.Claims;
-using System.Security.Cryptography.X509Certificates;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Antiforgery;
@@ -103,17 +102,6 @@ builder.Services.AddOpenIddict()
         {
             options.AddDevelopmentEncryptionCertificate().AddDevelopmentSigningCertificate();
         }
-        else
-        {
-            var signingPath = builder.Configuration["Auth:SigningCertificate:Path"];
-            var encryptionPath = builder.Configuration["Auth:EncryptionCertificate:Path"];
-            if (string.IsNullOrWhiteSpace(signingPath) || string.IsNullOrWhiteSpace(encryptionPath))
-                throw new InvalidOperationException("Production OAuth requires Auth:SigningCertificate:Path and Auth:EncryptionCertificate:Path. Use persistent certificates; development certificates are disabled in production.");
-            var signingCertificate = new X509Certificate2(signingPath, builder.Configuration["Auth:SigningCertificate:Password"], X509KeyStorageFlags.MachineKeySet | X509KeyStorageFlags.PersistKeySet);
-            var encryptionCertificate = new X509Certificate2(encryptionPath, builder.Configuration["Auth:EncryptionCertificate:Password"], X509KeyStorageFlags.MachineKeySet | X509KeyStorageFlags.PersistKeySet);
-            options.AddSigningCertificate(signingCertificate);
-            options.AddEncryptionCertificate(encryptionCertificate);
-        }
         var aspNetCore = options.UseAspNetCore().EnableAuthorizationEndpointPassthrough().EnableTokenEndpointPassthrough();
         if (builder.Environment.IsDevelopment()) aspNetCore.DisableTransportSecurityRequirement();
     })
@@ -123,6 +111,13 @@ builder.Services.AddOpenIddict()
         options.UseLocalServer();
         options.AddAudiences(oauthScope);
     });
+
+if (!builder.Environment.IsDevelopment())
+{
+    var keyDirectory = builder.Configuration["Auth:KeysPath"]
+        ?? throw new InvalidOperationException("Production requires Auth:KeysPath pointing to persistent writable storage.");
+    builder.Services.AddManagedOAuthKeys(keyDirectory);
+}
 
 builder.Services.AddAuthorization(options =>
 {

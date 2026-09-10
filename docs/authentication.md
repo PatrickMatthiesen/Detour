@@ -18,7 +18,6 @@ Set these values as secrets or deployment configuration. Environment variable na
   "Auth": {
     "AllowLocalDev": false,
     "PublicUrl": "https://trips.example.com",
-    "TrustedProxies": [ "${WEB_PROXY_IP}" ],
     "AllowedEmails": [ "owner@example.com" ],
     "Google": {
       "ClientId": "...apps.googleusercontent.com",
@@ -29,17 +28,23 @@ Set these values as secrets or deployment configuration. Environment variable na
       "Scope": "tripadvisor_api",
       "RedirectUris": [ "https://chat.openai.com/aip/<configured-callback>" ]
     },
-    "SigningCertificate": { "Path": "/run/secrets/signing.pfx", "Password": "..." },
-    "EncryptionCertificate": { "Path": "/run/secrets/encryption.pfx", "Password": "..." }
+    "KeysPath": "/var/lib/detour/keys/oauth"
   },
-  "DataProtection": { "KeysPath": "/var/lib/tripadvisor/keys" }
+  "DataProtection": { "KeysPath": "/var/lib/detour/keys" }
 }
 ```
 
-`Auth:PublicUrl` is the canonical HTTPS issuer and must match the externally visible API origin. Configure the reverse proxy to preserve that host and scheme using the normal ASP.NET forwarded-header setup. Keep the signing and encryption certificates stable across restarts and replicas; development certificates are intentionally disabled in production. Persist Data Protection keys so Identity cookies remain valid after a restart.
+`Auth:PublicUrl` is the canonical HTTPS issuer and must match the externally visible API origin. The supplied deployment exposes HTTP only on localhost for the host's Cloudflare Tunnel and enables forwarded headers there. For a different proxy setup, configure `Auth:TrustedProxies` with the immediate proxy IPs and disable the broad `ASPNETCORE_FORWARDEDHEADERS_ENABLED` switch. Do not expose an ingress that trusts forwarded headers directly to untrusted clients.
 
-`Auth:TrustedProxies` is an explicit list of immediate proxy IP addresses. The API accepts one forwarded host/scheme hop only from those addresses. With the production Compose overlay, set it to the fixed private address assigned to the web/YARP gateway (`WEB_PROXY_IP`); the API does not trust arbitrary client supplied forwarded headers.
-Disable the framework's broad `ASPNETCORE_FORWARDEDHEADERS_ENABLED` switch when using this allowlist; otherwise it can install a wider forwarded-header trust policy before the application policy runs. Set `Auth:TrustedProxies` to the actual web container address in container networking rather than assuming loopback.
+## Automatic OAuth keys
+
+Production requires `Auth:KeysPath` on persistent writable storage. Detour generates separate RSA signing and encryption credentials on first startup, writes them atomically, and reuses them after restarts/deployments. These credentials protect OAuth tokens, not HTTPS traffic. No PFX files or certificate passwords need to be supplied.
+
+Certificates last one year. A background check every six hours renews them when fewer than 30 days remain; startup also checks, including after a long shutdown. OpenIddict receives the renewed keys without restarting the process. Previous keys are retained so existing access and refresh tokens can still be processed; retaining a key does not extend a token's lifetime. Old keys are intentionally not automatically deleted (approximately one pair per year).
+
+The key directory is private (0700 on Linux) and key files are owner-only (0600). Key material is not password-encrypted on disk: protect and back up this directory as a secret, together with the database and cookie-protection keys. Deleting it disconnects existing OAuth clients. An invalid key file fails startup instead of silently generating replacement credentials. A rotation write failure stops the application instead of letting it run indefinitely with expiring credentials.
+
+This file-backed manager supports one API process per key directory and holds an exclusive ownership lock. Multiple replicas need coordinated key storage/rotation and are not supported by this deployment. The API container user must have write access to the persistent directory. Development continues using OpenIddict's development credentials.
 
 The application registers the ChatGPT public client only when both `Auth:OAuth:ClientId` and at least one absolute `Auth:OAuth:RedirectUris` value are supplied. It logs a setup warning and does not pretend the integration is configured when either is missing. Redirect URIs must exactly match the client settings in the ChatGPT connector.
 

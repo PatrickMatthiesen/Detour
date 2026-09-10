@@ -42,7 +42,7 @@ if (builder.ExecutionContext.IsPublishMode)
         .Where(endpoint => endpoint.Name != "http").ToArray())
         api.Resource.Annotations.Remove(endpoint);
 
-    var publicUrl = builder.Configuration["Detour:PublicUrl"] ?? "https://detour.bmstack.net";
+    var publicUrl = builder.Configuration["Detour:PublicUrl"] ?? "https://detour.patrickbm.com";
     api.WithEndpoint("http", endpoint =>
         {
             endpoint.Port = 8080;
@@ -59,10 +59,7 @@ if (builder.ExecutionContext.IsPublishMode)
         .WithEnvironment("Auth__AllowedEmails__0", builder.AddParameter("OwnerEmail", secret: true))
         .WithEnvironment("Auth__OAuth__ClientId", builder.AddParameter("ChatGptClientId"))
         .WithEnvironment("Auth__OAuth__RedirectUris__0", builder.AddParameter("ChatGptRedirectUri"))
-        .WithEnvironment("Auth__SigningCertificate__Path", "/run/detour-certificates/signing.pfx")
-        .WithEnvironment("Auth__SigningCertificate__Password", builder.AddParameter("SigningCertificatePassword", secret: true))
-        .WithEnvironment("Auth__EncryptionCertificate__Path", "/run/detour-certificates/encryption.pfx")
-        .WithEnvironment("Auth__EncryptionCertificate__Password", builder.AddParameter("EncryptionCertificatePassword", secret: true))
+        .WithEnvironment("Auth__KeysPath", "/var/lib/detour/keys/oauth")
         .WithEnvironment("DataProtection__KeysPath", "/var/lib/detour/keys")
         .PublishAsDockerComposeService((_, service) =>
         {
@@ -71,14 +68,6 @@ if (builder.ExecutionContext.IsPublishMode)
             service.Ports.Clear();
             service.Ports.Add("127.0.0.1:8080:8080");
             // These paths belong to the target Docker host, not the CI runner.
-            service.Volumes.Add(new()
-            {
-                Name = "detour-certificates",
-                Type = "bind",
-                Source = builder.Configuration["Detour:CertificatesDirectory"] ?? "/srv/detour/certificates",
-                Target = "/run/detour-certificates",
-                ReadOnly = true
-            });
             service.Volumes.Add(new()
             {
                 Name = "detour-keys",
