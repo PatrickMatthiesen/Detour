@@ -91,7 +91,7 @@ if (!string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(goo
             context.Response.Redirect("/?login=failed");
             return Task.CompletedTask;
         };
-        options.ClaimActions.MapJsonKey("email_verified", "verified_email", ClaimValueTypes.Boolean);
+        options.ClaimActions.MapJsonKey("email_verified", "email_verified", ClaimValueTypes.Boolean);
     });
 
 builder.Services.AddOpenIddict()

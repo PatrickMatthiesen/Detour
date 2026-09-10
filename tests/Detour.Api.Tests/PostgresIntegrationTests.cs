@@ -2,6 +2,7 @@ using System.Net;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -13,6 +14,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Npgsql;
 using Detour.Api;
 
@@ -301,6 +303,74 @@ public sealed class PostgresIntegrationTests : IAsyncLifetime
         }
     }
 
+    [Theory]
+    [InlineData("owner@example.test", true, true)]
+    [InlineData("other@example.test", true, false)]
+    [InlineData("owner@example.test", false, false)]
+    public async Task Google_callback_authenticates_only_allowed_verified_users(string email, bool verified, bool expectedAuthenticated)
+    {
+        if (!HasDatabase()) return;
+        var previousConnection = Environment.GetEnvironmentVariable("ConnectionStrings__tripdb");
+        var previousClientId = Environment.GetEnvironmentVariable("Auth__Google__ClientId");
+        var previousClientSecret = Environment.GetEnvironmentVariable("Auth__Google__ClientSecret");
+        var previousAllowedEmail = Environment.GetEnvironmentVariable("Auth__AllowedEmails__0");
+        var previousLocalDev = Environment.GetEnvironmentVariable("Auth__AllowLocalDev");
+        Environment.SetEnvironmentVariable("ConnectionStrings__tripdb", connection);
+        Environment.SetEnvironmentVariable("Auth__Google__ClientId", "regression-client");
+        Environment.SetEnvironmentVariable("Auth__Google__ClientSecret", "regression-secret");
+        Environment.SetEnvironmentVariable("Auth__AllowedEmails__0", "owner@example.test");
+        Environment.SetEnvironmentVariable("Auth__AllowLocalDev", "false");
+        try
+        {
+            using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+            {
+                builder.UseEnvironment("Development");
+                builder.ConfigureTestServices(services => services.PostConfigure<GoogleOptions>(
+                    GoogleDefaults.AuthenticationScheme, options =>
+                    {
+                        options.AuthorizationEndpoint = "https://accounts.google.test/o/oauth2/v2/auth";
+                        options.TokenEndpoint = "https://oauth2.google.test/token";
+                        options.UserInformationEndpoint = "https://oauth2.google.test/userinfo";
+                        options.Backchannel = new HttpClient(new GoogleBackchannelHandler(email, verified));
+                    }));
+            });
+            using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+            {
+                BaseAddress = new Uri("https://localhost"),
+                AllowAutoRedirect = false
+            });
+
+            using var login = await client.GetAsync("/auth/login?returnUrl=%2Fplan");
+            Assert.Equal(HttpStatusCode.Redirect, login.StatusCode);
+            var authorization = Assert.IsType<Uri>(login.Headers.Location);
+            var state = QueryHelpers.ParseQuery(authorization.Query)["state"].ToString();
+            Assert.False(string.IsNullOrWhiteSpace(state));
+
+            using var googleCallback = await client.GetAsync($"/signin-google?code=test-code&state={Uri.EscapeDataString(state)}");
+            Assert.Equal(HttpStatusCode.Redirect, googleCallback.StatusCode);
+            var callback = Assert.IsType<Uri>(googleCallback.Headers.Location);
+            Assert.Equal("/auth/callback?returnUrl=%2Fplan", callback.OriginalString);
+
+            using var completed = await client.GetAsync(callback.OriginalString);
+            Assert.Equal(HttpStatusCode.Redirect, completed.StatusCode);
+            Assert.Equal(expectedAuthenticated ? "/plan" : "/?login=denied", Assert.IsType<Uri>(completed.Headers.Location).OriginalString);
+
+            using var me = await client.GetAsync("/auth/me");
+            me.EnsureSuccessStatusCode();
+            var json = JsonSerializer.Deserialize<JsonElement>(await me.Content.ReadAsStringAsync(), JsonOptions);
+            Assert.Equal(expectedAuthenticated, json.GetProperty("authenticated").GetBoolean());
+            if (expectedAuthenticated) Assert.Equal(email, json.GetProperty("email").GetString());
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("ConnectionStrings__tripdb", previousConnection);
+            Environment.SetEnvironmentVariable("Auth__Google__ClientId", previousClientId);
+            Environment.SetEnvironmentVariable("Auth__Google__ClientSecret", previousClientSecret);
+            Environment.SetEnvironmentVariable("Auth__AllowedEmails__0", previousAllowedEmail);
+            Environment.SetEnvironmentVariable("Auth__AllowLocalDev", previousLocalDev);
+        }
+    }
+
     [Fact]
     public async Task Protected_api_and_mcp_reject_anonymous_and_invalid_bearer_requests()
     {
@@ -351,6 +421,24 @@ public sealed class PostgresIntegrationTests : IAsyncLifetime
     }
 
     private static TripSnapshot Clone(TripSnapshot snapshot) => JsonSerializer.Deserialize<TripSnapshot>(JsonSerializer.Serialize(snapshot, JsonOptions), JsonOptions)!;
+
+    private sealed class GoogleBackchannelHandler(string email, bool verified) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var path = request.RequestUri?.AbsolutePath;
+            if (path == "/token")
+                return Task.FromResult(JsonResponse("{\"access_token\":\"test-access-token\",\"token_type\":\"Bearer\",\"expires_in\":3600}"));
+            if (path == "/userinfo")
+                return Task.FromResult(JsonResponse($"{{\"sub\":\"google-user\",\"id\":\"google-user\",\"name\":\"Test Owner\",\"email\":\"{email}\",\"email_verified\":{verified.ToString().ToLowerInvariant()}}}"));
+            throw new InvalidOperationException($"Unexpected Google backchannel request: {request.Method} {request.RequestUri}");
+        }
+
+        private static HttpResponseMessage JsonResponse(string json) => new(HttpStatusCode.OK)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
+        };
+    }
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
