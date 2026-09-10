@@ -139,6 +139,8 @@ builder.Services.AddAuthorization(options =>
 builder.Services.AddMcpServer().WithHttpTransport(options => options.Stateless = false).WithTools<TripMcpTools>();
 builder.Services.AddScoped<OpenIddictInitializer>();
 var app = builder.Build();
+app.UseDefaultFiles();
+app.UseStaticFiles();
 if (trustedProxyAddresses.Length > 0)
     app.UseForwardedHeaders();
 using (var initializationScope = app.Services.CreateScope())
@@ -289,6 +291,9 @@ app.MapPost("/connect/token", async (HttpContext context) =>
 });
 var mcp = app.MapMcp("/mcp");
 if (secured) mcp.RequireAuthorization("trip-data");
+// Known React routes only: missing API/auth/MCP endpoints must remain 404s.
+foreach (var route in new[] { "/", "/plan", "/itinerary", "/preparation", "/{preview:int}" })
+    app.MapFallbackToFile(route, "index.html");
 app.Run();
 static string? SafeReturnUrl(string? value)
     => !string.IsNullOrWhiteSpace(value) && value.StartsWith('/') && !value.StartsWith("//") ? value : null;

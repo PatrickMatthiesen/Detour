@@ -29,11 +29,9 @@ jobs:
     timeout-minutes: 30
     environment: Production
     env:
-      ASPIRE_CONTAINER_RUNTIME: docker
-      RELEASE_ID: ${{ github.sha }}
+      DOCKER_CONTEXT_NAME: detour-${{ github.run_id }}
       DEPLOY_HOST: ${{ secrets.SSH_HOST }}
       DEPLOY_USER: ${{ secrets.SSH_USER }}
-      DEPLOY_ROOT: ${{ vars.DEPLOY_ROOT }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-dotnet@v5
@@ -42,25 +40,14 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.3
-      - name: Validate target configuration
-        shell: bash
-        run: |
-          [[ "$DEPLOY_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]]
-          [[ "$DEPLOY_USER" =~ ^[a-z_][a-z0-9_-]*$ ]]
-          [[ "$DEPLOY_ROOT" =~ ^/[a-zA-Z0-9_/-]+$ && "$DEPLOY_ROOT" != / && "$DEPLOY_ROOT" != *..* ]]
-      - name: Install pinned Aspire CLI
+      - name: Install Aspire CLI
         run: |
           curl --fail --silent --show-error --location https://aspire.dev/install.sh -o "$RUNNER_TEMP/install-aspire.sh"
           bash "$RUNNER_TEMP/install-aspire.sh" --version 13.6.0-preview.1.26421.15
           echo "$HOME/.aspire/bin" >> "$GITHUB_PATH"
-      - name: Generate Compose with Aspire
-        run: aspire publish --output-path artifacts/compose --non-interactive
-      - name: Build commit-tagged Linux images
-        run: |
-          dotnet publish src/Detour.Api/Detour.Api.csproj --configuration Release --os linux --arch x64 /t:PublishContainer -p:ContainerRepository=detour-api -p:ContainerImageTag="$RELEASE_ID"
-          docker build --file artifacts/compose/web.Dockerfile --tag "detour-web:$RELEASE_ID" web
-      - name: Package only release files and images
-        run: python3 deploy/package-release.py artifacts/compose "$RELEASE_ID" artifacts/release
+      - name: Restore frontend dependencies
+        working-directory: web
+        run: bun install --frozen-lockfile
       - name: Connect to Tailscale
         uses: tailscale/github-action@v4
         with:
@@ -68,33 +55,34 @@ jobs:
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
           tags: tag:ci
           use-cache: 'true'
+          version: latest
           ping: ${{ secrets.SSH_HOST }}
-      - name: Configure verified SSH host key
+      - name: Add SSH host key
+        run: |
+          mkdir -p "$HOME/.ssh"
+          ssh-keyscan -H "$DEPLOY_HOST" >> "$HOME/.ssh/known_hosts"
+      - name: Deploy with Aspire through Docker context
         env:
-          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          ASPIRE_CONTAINER_RUNTIME: docker
+          Parameters__postgres_password: ${{ secrets.POSTGRES_PASSWORD }}
+          Parameters__GoogleClientId: ${{ secrets.GOOGLE_CLIENT_ID }}
+          Parameters__GoogleClientSecret: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          Parameters__OwnerEmail: ${{ secrets.OWNER_EMAIL }}
+          Parameters__ChatGptClientId: ${{ vars.CHATGPT_CLIENT_ID }}
+          Parameters__ChatGptRedirectUri: ${{ vars.CHATGPT_REDIRECT_URI }}
+          Parameters__SigningCertificatePassword: ${{ secrets.SIGNING_CERTIFICATE_PASSWORD }}
+          Parameters__EncryptionCertificatePassword: ${{ secrets.ENCRYPTION_CERTIFICATE_PASSWORD }}
+          Detour__PublicUrl: ${{ vars.PUBLIC_URL || 'https://detour.bmstack.net' }}
+          Detour__CertificatesDirectory: ${{ vars.AUTH_CERTIFICATES_DIR || '/srv/detour/certificates' }}
+          Detour__KeysDirectory: ${{ vars.AUTH_KEYS_DIR || '/srv/detour/keys' }}
         run: |
-          test -n "$SSH_KNOWN_HOSTS"
-          install -d -m 700 "$HOME/.ssh"
-          printf '%s\n' "$SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
-          chmod 600 "$HOME/.ssh/known_hosts"
-          if [ -n "$SSH_PRIVATE_KEY" ]; then
-            printf '%s\n' "$SSH_PRIVATE_KEY" > "$HOME/.ssh/id_ed25519"
-            chmod 600 "$HOME/.ssh/id_ed25519"
-          fi
-          printf 'Host *\n  BatchMode yes\n  StrictHostKeyChecking yes\n' > "$HOME/.ssh/config"
-      - name: Transfer and apply release
-        run: |
-          # Paths and IDs are validated above; expand them on the runner.
-          # shellcheck disable=SC2029
-          ssh "$DEPLOY_USER@$DEPLOY_HOST" "test -r '$DEPLOY_ROOT/production.env' && install -d -m 700 '$DEPLOY_ROOT/releases/$RELEASE_ID'"
-          scp artifacts/release/* "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_ROOT/releases/$RELEASE_ID/"
-          # shellcheck disable=SC2029
-          ssh "$DEPLOY_USER@$DEPLOY_HOST" "bash '$DEPLOY_ROOT/releases/$RELEASE_ID/apply-release.sh' '$DEPLOY_ROOT' '$RELEASE_ID'"
-      - name: Record successful deployment
-        run: |
-          echo "Deployed commit $RELEASE_ID to Detour Production." >> "$GITHUB_STEP_SUMMARY"
-          echo 'Application sign-in and ChatGPT OAuth still require end-to-end verification after initial setup.' >> "$GITHUB_STEP_SUMMARY"
-      - name: Remove runner SSH identity
+          docker context create "$DOCKER_CONTEXT_NAME" --docker "host=ssh://$DEPLOY_USER@$DEPLOY_HOST"
+          docker context use "$DOCKER_CONTEXT_NAME"
+          aspire deploy --environment Production --non-interactive
+      - name: Verify application health
+        run: ssh -o BatchMode=yes "$DEPLOY_USER@$DEPLOY_HOST" 'curl --fail --silent --show-error --retry 12 --retry-delay 5 --retry-connrefused http://127.0.0.1:8080/health'
+      - name: Remove temporary Docker context
         if: always()
-        run: rm -f "$HOME/.ssh/id_ed25519"
+        run: |
+          docker context use default
+          docker context rm "$DOCKER_CONTEXT_NAME" || true

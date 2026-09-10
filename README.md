@@ -35,7 +35,7 @@ The AppHost includes Aspire's Docker Compose environment. Generate a reviewable 
 aspire publish --non-interactive -o artifacts/compose
 ```
 
-This writes `docker-compose.yaml`, a placeholder `.env`, and the generated frontend Dockerfile under `artifacts/compose`. Configure image names, registry credentials, and deployment secrets through the target environment before running a deployment. Do not commit the generated `.env` or private source data. See [self-hosting](docs/self-hosting.md) and the production override in `deploy/compose.production.yaml` for the single-hostname Cloudflare Tunnel layout.
+This writes Compose artifacts and parameter placeholders under `artifacts/compose`. AppHost packages the React build into the API container for production. Do not commit generated environment files or private source data. See [self-hosting](docs/self-hosting.md) for the single-hostname Cloudflare Tunnel setup.
 
 ## ChatGPT MCP connection
 
@@ -45,7 +45,7 @@ See the [agent tool guide](docs/mcp-tools.md) for focused edits, partial-update 
 
 ## Deployment
 
-GitHub Actions runs verification on pushes and pull requests. The manual **Deploy Detour** workflow builds through Aspire and deploys through Tailscale/SSH after verification, using the `Production` environment. See [self-hosting and workflow setup](docs/self-hosting.md). Production credentials stay on the target server.
+GitHub Actions runs verification on pushes and pull requests. The manual **Deploy Detour** workflow builds through Aspire and deploys through Tailscale/SSH after verification, using the `Production` environment. See [self-hosting and workflow setup](docs/self-hosting.md). Deployment secrets come from the GitHub Production environment; persistent authentication certificates and keys stay on the server.
 
 ## Tests
 
