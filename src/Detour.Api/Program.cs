@@ -85,6 +85,12 @@ if (!string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(goo
         options.ClientSecret = googleClientSecret;
         options.SignInScheme = IdentityConstants.ExternalScheme;
         options.SaveTokens = false;
+        options.Events.OnRemoteFailure = context =>
+        {
+            context.HandleResponse();
+            context.Response.Redirect("/?login=failed");
+            return Task.CompletedTask;
+        };
         options.ClaimActions.MapJsonKey("email_verified", "verified_email", ClaimValueTypes.Boolean);
     });
 
@@ -218,15 +224,15 @@ app.MapGet("/auth/login", (HttpRequest request) =>
 app.MapGet("/auth/callback", async (HttpContext context, SignInManager<ApplicationUser> signInManager, UserManager<ApplicationUser> userManager, HttpRequest request) =>
 {
     var info = await signInManager.GetExternalLoginInfoAsync();
-    if (info is null) return Results.Problem("The Google login response was not available.", statusCode: StatusCodes.Status401Unauthorized);
+    if (info is null) return Results.LocalRedirect("/?login=failed");
     var email = info.Principal.FindFirstValue(ClaimTypes.Email);
     var verified = info.Principal.FindFirst("email_verified")?.Value
         ?? info.Principal.FindFirst("urn:google:verified")?.Value;
     if (!string.Equals(verified, "true", StringComparison.OrdinalIgnoreCase))
-        return Results.Problem("Google did not verify this email address.", statusCode: StatusCodes.Status403Forbidden);
+        return Results.LocalRedirect("/?login=denied");
     var allowed = builder.Configuration.GetSection("Auth:AllowedEmails").Get<string[]>() ?? [];
     if (string.IsNullOrWhiteSpace(email) || allowed.Length == 0 || !allowed.Contains(email, StringComparer.OrdinalIgnoreCase))
-        return Results.Problem("This account is not allowed to use the private trip planner.", statusCode: StatusCodes.Status403Forbidden);
+        return Results.LocalRedirect("/?login=denied");
     var user = await userManager.FindByLoginAsync(info.LoginProvider, info.ProviderKey) ?? await userManager.FindByEmailAsync(email);
     if (user is null)
     {

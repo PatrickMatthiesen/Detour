@@ -52,6 +52,7 @@ import {
   previewTrip,
   saveTrip,
 } from "./api";
+import { LoginScreen } from "./LoginScreen";
 import PreparePage from "./prepare/PreparePage";
 import { PlacesExplorer } from "./mockups/ConceptFour";
 import { displayPlaces, shortDate } from "./mockups/design-kit";
@@ -2302,8 +2303,19 @@ const ConceptEight = React.lazy(() => import("./mockups/ConceptEight"));
 const ConceptNine = React.lazy(() => import("./mockups/ConceptNine"));
 function DetourApp() {
   const [session, setSession] = useState<Awaited<ReturnType<typeof getAuthSession>> | null>(null);
+  const [failed, setFailed] = useState(false);
+  const checkSession = useCallback(() => {
+    setFailed(false);
+    getAuthSession().then(setSession).catch(() => setFailed(true));
+  }, []);
+  useEffect(checkSession, [checkSession]);
+  if (failed) return <LoginScreen mode="error" onRetry={checkSession}/>;
+  if (!session) return <LoginScreen mode="loading"/>;
+  if (!session.authenticated && !session.localDevelopment) return <LoginScreen mode="login" googleConfigured={session.googleConfigured}/>;
+  return <AuthenticatedDetourApp session={session}/>;
+}
+function AuthenticatedDetourApp({session}: {session: Awaited<ReturnType<typeof getAuthSession>>}) {
   const [sessionError, setSessionError] = useState("");
-  useEffect(()=>{getAuthSession().then(setSession).catch(error=>setSessionError(String(error)))},[]);
   const state = useTripState();
   const { pathname } = useLocation();
   const [adding, setAdding] = useState(false);
@@ -2319,6 +2331,7 @@ function DetourApp() {
     </nav>
     {session?.authenticated && !session.localDevelopment && <button className="detour-account" onClick={()=>logout().then(()=>window.location.reload()).catch(error=>setSessionError(String(error)))}>Sign out</button>}
   </header>;
+  if (state.apiError.includes("401")) return <LoginScreen mode="login" expired/>;
   const selected = new Set(snapshot.places.filter(p => p.selected).map(p => p.id));
   return <div className="detour-app">
     {sessionError && <div role="alert">{sessionError}</div>}

@@ -1,0 +1,15 @@
+.login-page { min-height: 100svh; background: #faf9f5; color: #263b3e; padding: 32px clamp(24px, 6vw, 100px); }
+.login-brand { display: inline-flex; gap: 10px; align-items: center; color: #bc4939; font-size: 26px; font-weight: 700; letter-spacing: -.7px; }
+.login-layout { max-width: 1080px; margin: max(60px, 12vh) auto 48px; display: grid; grid-template-columns: 1.2fr 1fr; align-items: center; gap: clamp(40px, 7vw, 110px); }
+.login-welcome h1 { font: 600 clamp(38px, 4.5vw, 60px)/1.08 'IBM Plex Sans', sans-serif; letter-spacing: -2px; }
+.login-welcome p { margin-top: 24px; font-size: 18px; line-height: 1.6; color: #627574; }
+.login-route { display: block; width: 100%; max-width: 420px; margin-top: 30px; }
+.login-panel { background: #fff; border: 1px solid #e0e6df; border-radius: 18px; padding: clamp(28px, 3vw, 44px); box-shadow: 0 12px 40px #29413708; }
+.login-symbol { color: #507970; margin-bottom: 28px; }
+.login-panel h2 { font: 600 27px/1.2 'IBM Plex Sans', sans-serif; letter-spacing: -.7px; }
+.login-panel p { margin-top: 12px; color: #627574; font-size: 16px; line-height: 1.55; }
+.login-google { margin-top: 28px; width: 100%; display: flex; justify-content: center; align-items: center; gap: 12px; padding: 14px 16px; background: #fff; color: #263b3e; border: 1px solid #b7c3bc; border-radius: 8px; font-size: 15px; font-weight: 500; }
+.login-google:hover { background: #f0f5ef; border-color: #507970; }
+.login-panel small { display: block; margin-top: 20px; color: #73827e; font-size: 13px; line-height: 1.5; }
+.login-panel .login-notice { padding: 12px; background: #fcf1dd; color: #795b25; border-radius: 6px; font-size: 14px; }
+@media (max-width: 700px) { .login-layout { grid-template-columns: 1fr; margin-top: 46px; gap: 32px; max-width: 420px; }.login-welcome h1 { font-size: 38px; letter-spacing: -1.2px; }.login-route { display: none; }.login-welcome p { font-size: 16px; margin-top: 16px; }.login-linebreak { display: none; } }

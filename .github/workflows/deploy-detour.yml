@@ -77,7 +77,12 @@ jobs:
           docker context use "$DOCKER_CONTEXT_NAME"
           aspire deploy --environment Production --non-interactive
       - name: Verify application health
-        run: ssh -o BatchMode=yes "$DEPLOY_USER@$DEPLOY_HOST" 'curl --fail --silent --show-error --retry 12 --retry-delay 5 --retry-connrefused http://127.0.0.1:48327/health'
+        env:
+          PUBLIC_URL: ${{ vars.PUBLIC_URL || 'https://detour.patrickbm.com' }}
+        run: |
+          public_host=$(python3 -c 'import os, urllib.parse; print(urllib.parse.urlparse(os.environ["PUBLIC_URL"]).hostname or "")')
+          [[ "$public_host" =~ ^[a-zA-Z0-9.-]+$ ]] || exit 1
+          ssh -o BatchMode=yes "$DEPLOY_USER@$DEPLOY_HOST" "curl --fail --silent --show-error --retry 12 --retry-delay 5 --retry-connrefused -H 'Host: $public_host' http://127.0.0.1:48327/health"
       - name: Remove temporary Docker context
         if: always()
         run: |
