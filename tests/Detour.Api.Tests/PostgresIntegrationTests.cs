@@ -320,7 +320,7 @@ public sealed class PostgresIntegrationTests : IAsyncLifetime
             var existing = await manager.FindByNameAsync(scope);
             Assert.NotNull(existing);
             Assert.Equal("Detour data", await manager.GetDisplayNameAsync(existing!));
-            Assert.Equal([resource], await manager.GetResourcesAsync(existing!));
+            Assert.Equal(resource, Assert.Single(await manager.GetResourcesAsync(existing!)));
         }
         finally
         {
@@ -600,7 +600,7 @@ public sealed class PostgresIntegrationTests : IAsyncLifetime
                 ["resource"] = resource
             });
             using var authorize = await client.GetAsync(query);
-            Assert.Equal(HttpStatusCode.Redirect, authorize.StatusCode);
+            Assert.True(authorize.StatusCode == HttpStatusCode.Redirect, await authorize.Content.ReadAsStringAsync());
             var callback = Assert.IsType<Uri>(authorize.Headers.Location);
             var callbackQuery = QueryHelpers.ParseQuery(callback.Query);
             var code = callbackQuery["code"].ToString();

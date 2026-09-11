@@ -54,6 +54,7 @@ public sealed class OpenIddictInitializer(
             OpenIddictConstants.Permissions.GrantTypes.AuthorizationCode,
             OpenIddictConstants.Permissions.GrantTypes.RefreshToken,
             OpenIddictConstants.Permissions.ResponseTypes.Code,
+            OpenIddictConstants.Permissions.Prefixes.Resource + OAuthResource.GetIdentifier(configuration),
             OpenIddictConstants.Permissions.Prefixes.Scope + OpenIddictConstants.Scopes.OpenId,
             OpenIddictConstants.Permissions.Prefixes.Scope + OpenIddictConstants.Scopes.Profile,
             OpenIddictConstants.Permissions.Prefixes.Scope + OpenIddictConstants.Scopes.Email,
