@@ -198,6 +198,8 @@ public sealed class TripService(TripDbContext db, OwnerAccessor ownerAccessor, P
     private static void ValidateAndNormalize(TripSnapshot snapshot)
     {
         snapshot.Places ??= []; snapshot.Stays ??= []; snapshot.TravelLegs ??= []; snapshot.Activities ??= []; snapshot.Bookings ??= []; snapshot.Tasks ??= []; snapshot.PackingItems ??= [];
+        if (snapshot.Places.Select(x => x.Id).Distinct(StringComparer.Ordinal).Count() != snapshot.Places.Count)
+            throw new ArgumentException("Place IDs must be unique.");
         foreach (var stay in snapshot.Stays)
             if (stay.CheckOut < stay.CheckIn) throw new ArgumentException("Stay checkout must not precede check-in.");
         foreach (var place in snapshot.Places)

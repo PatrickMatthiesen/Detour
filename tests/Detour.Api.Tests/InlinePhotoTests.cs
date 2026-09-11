@@ -235,6 +235,38 @@ public sealed class InlinePhotoTests
         Assert.Equal([ImageUrl], http.Requests);
     }
 
+    [Fact]
+    public async Task Full_trip_replace_rejects_duplicate_place_ids_before_staging_photos()
+    {
+        await using var db = CreateDb();
+        var http = new PhotoHttpClientFactory();
+        var store = new FakePhotoStore();
+        var (service, _) = CreateTools(db, http, store);
+        var input = await service.GetSnapshotAsync();
+        input.Places =
+        [
+            new Place
+            {
+                Id = "duplicate",
+                Name = "First",
+                City = "Tokyo",
+                Photo = new PhotoDescriptor(Guid.Empty, ImageUrl, null, null, null, "place", null)
+            },
+            new Place
+            {
+                Id = "duplicate",
+                Name = "Second",
+                City = "Kyoto",
+                Photo = new PhotoDescriptor(Guid.Empty, ReplacementUrl, null, null, null, "place", null)
+            }
+        ];
+
+        Assert.IsType<ReplaceResult.Invalid>(await service.ReplaceAsync(input, input.Version));
+        Assert.Empty(http.Requests);
+        Assert.Empty(store.Objects);
+        Assert.Empty(db.PhotoObjectDeletions);
+    }
+
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     private static TripDbContext CreateDb() => new(

@@ -11,6 +11,7 @@ Prerequisites:
 - Docker Desktop running
 - Bun for frontend dependencies, builds, and tests
 - Node.js/npm (currently used by Aspire to launch the Vite development server)
+- PowerShell 7 (`pwsh`) for the package restore and photo import scripts, including on Linux/macOS
 
 Start the full development graph from the repository root:
 
