@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using ModelContextProtocol.Server;
@@ -20,7 +21,22 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<OwnerAccessor>();
 builder.Services.AddScoped<TripService>();
 builder.Services.AddScoped<TripItemEditor>();
+builder.Services.AddScoped<PlacePhotoService>();
+builder.Services.AddScoped<PhotoDownloader>();
+builder.Services.AddHostedService<PhotoCleanupWorker>();
 builder.Services.AddAntiforgery(options => options.HeaderName = "X-CSRF-TOKEN");
+builder.Services.Configure<FormOptions>(options => options.MultipartBodyLengthLimit = PhotoDownloader.MaxDownloadBytes + 1024 * 1024);
+
+builder.Services.AddHttpClient("photo-import", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(30);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("Detour/1.0 photo importer");
+}).ConfigurePrimaryHttpMessageHandler(PhotoDownloader.CreateHandler);
+var photoStorageConnection = builder.Configuration.GetConnectionString("photos")
+    ?? builder.Configuration.GetConnectionString("photo");
+builder.Services.AddSingleton<IPhotoObjectStore>(string.IsNullOrWhiteSpace(photoStorageConnection)
+    ? new UnavailablePhotoObjectStore()
+    : S3PhotoObjectStore.Create(photoStorageConnection));
 
 var connectionString = builder.Configuration.GetConnectionString("tripdb")
     ?? builder.Configuration.GetConnectionString("trip")
@@ -139,7 +155,7 @@ builder.Services.AddAuthorization(options =>
                 .Contains(oauthScope, StringComparer.Ordinal)));
 });
 
-builder.Services.AddMcpServer().WithHttpTransport(options => options.Stateless = false).WithTools<TripMcpTools>();
+builder.Services.AddMcpServer().WithHttpTransport(options => options.Stateless = false).WithTools<TripMcpTools>().WithTools<PhotoMcpTools>();
 builder.Services.AddScoped<OpenIddictInitializer>();
 var app = builder.Build();
 app.UseDefaultFiles();
@@ -163,6 +179,24 @@ app.Use(async (context, next) =>
         {
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
             await context.Response.WriteAsJsonAsync(new { error = "unauthorized" });
+        }
+    }
+    catch (Exception ex) when (context.Request.Path.StartsWithSegments("/api/places") &&
+        ex is PhotoStorageUnavailableException or Amazon.S3.AmazonS3Exception)
+    {
+        if (!context.Response.HasStarted)
+        {
+            context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+            await context.Response.WriteAsJsonAsync(new { error = "photo_storage_unavailable", message = "Photo storage is temporarily unavailable." });
+        }
+    }
+    catch (Exception ex) when (context.Request.Path.StartsWithSegments("/api/places") &&
+        ex is InvalidOperationException or SixLabors.ImageSharp.UnknownImageFormatException or SixLabors.ImageSharp.InvalidImageContentException or HttpRequestException or TimeoutException)
+    {
+        if (!context.Response.HasStarted)
+        {
+            context.Response.StatusCode = StatusCodes.Status400BadRequest;
+            await context.Response.WriteAsJsonAsync(new { error = "photo_import_failed", message = "The image could not be imported. Check the image URL, format, size, and storage availability." });
         }
     }
 });
@@ -208,7 +242,27 @@ var putTrip = app.MapPut("/api/trip", async (TripSnapshot request, TripService s
         _ => Results.BadRequest(new { error = "invalid_trip" })
     };
 });
+var getPhoto = app.MapGet("/api/places/{placeId}/photo", async (string placeId, Guid v, HttpResponse response, PlacePhotoService photos, CancellationToken ct) =>
+{
+    var photo = await photos.OpenAsync(placeId, v, ct);
+    if (photo is null) return Results.NotFound();
+    response.Headers.CacheControl = "private, no-store";
+    return Results.Stream(photo.Content, photo.ContentType, enableRangeProcessing: true);
+});
+var importPhoto = app.MapPost("/api/places/{placeId}/photo", async (string placeId, ImportPhotoRequest request, PlacePhotoService photos, CancellationToken ct) => PhotoResult(await photos.ImportAsync(placeId, request.ImageUrl, request.SourceUrl, request.Author, request.Caption, request.Kind, request.License, request.ExpectedVersion, ct)));
+var uploadPhoto = app.MapPost("/api/places/{placeId}/photo/upload", async (string placeId, HttpRequest request, PlacePhotoService photos, CancellationToken ct) =>
+{
+    var form = await request.ReadFormAsync(ct);
+    var file = form.Files.GetFile("file");
+    if (file is null) return Results.BadRequest(new { error = "file_required", message = "Multipart field 'file' is required." });
+    if (!long.TryParse(form["expectedVersion"].ToString(), out var expectedVersion)) return Results.BadRequest(new { error = "expected_version_required" });
+    await using var stream = file.OpenReadStream();
+    var result = await photos.ImportUploadedAsync(placeId, stream, form["sourceUrl"].ToString(), form["author"].ToString(), form["caption"].ToString(), form["kind"].ToString(), form["license"].ToString(), expectedVersion, ct);
+    return PhotoResult(result);
+});
+var removePhoto = app.MapDelete("/api/places/{placeId}/photo", async (string placeId, [FromBody] RemovePhotoRequest request, PlacePhotoService photos, CancellationToken ct) => PhotoResult(await photos.RemoveAsync(placeId, request.ExpectedVersion, ct)));
 if (secured) { getTrip.RequireAuthorization("trip-data"); putTrip.RequireAuthorization("trip-data"); }
+if (secured) { getPhoto.RequireAuthorization("trip-data"); importPhoto.RequireAuthorization("trip-data"); uploadPhoto.RequireAuthorization("trip-data"); removePhoto.RequireAuthorization("trip-data"); }
 app.MapGet("/.well-known/oauth-protected-resource", () =>
 {
     var resource = oauthResource;
@@ -301,4 +355,13 @@ foreach (var route in new[] { "/", "/plan", "/itinerary", "/preparation", "/{pre
 app.Run();
 static string? SafeReturnUrl(string? value)
     => !string.IsNullOrWhiteSpace(value) && value.StartsWith('/') && !value.StartsWith("//") ? value : null;
+static IResult PhotoResult(PhotoOperationResult result) => result.Success ? Results.Ok(result) : result.Error switch
+{
+    "not_found" => Results.NotFound(result),
+    "version_conflict" => Results.Conflict(result),
+    _ => Results.BadRequest(result)
+};
 public partial class Program { }
+
+public sealed record ImportPhotoRequest(string ImageUrl, string? SourceUrl, string? Author, string? Caption, string? Kind, string? License, long ExpectedVersion);
+public sealed record RemovePhotoRequest(long ExpectedVersion);

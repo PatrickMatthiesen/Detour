@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 
 namespace Detour.Api;
@@ -14,36 +15,60 @@ public sealed class TripService(TripDbContext db, OwnerAccessor ownerAccessor)
         if (row is null)
         {
             var snapshot = NewSnapshot();
-            row = new TripDocumentRow { Id = Guid.NewGuid(), OwnerId = owner, Version = 1, Json = JsonSerializer.Serialize(snapshot, JsonOptions), UpdatedAt = DateTimeOffset.UtcNow };
+            row = new TripDocumentRow { Id = Guid.NewGuid(), OwnerId = owner, Version = 1, Json = SerializeForPersistence(snapshot), UpdatedAt = DateTimeOffset.UtcNow };
             await db.Trips.AddAsync(row, cancellationToken);
             await db.SaveChangesAsync(cancellationToken);
             snapshot.Version = row.Version;
+            await EnrichPhotosAsync(snapshot, owner, cancellationToken);
             return snapshot;
         }
-        return Read(row);
+        var loaded = Read(row);
+        await EnrichPhotosAsync(loaded, owner, cancellationToken);
+        return loaded;
     }
 
     public async Task<ReplaceResult> ReplaceAsync(TripSnapshot input, long expectedVersion, CancellationToken cancellationToken = default)
     {
         if (expectedVersion < 0 || input.Trip is null || input.Trip.StartDate > input.Trip.EndDate) return new ReplaceResult.Invalid();
+        await using var transaction = db.Database.IsRelational() ? await db.Database.BeginTransactionAsync(cancellationToken) : null;
         var owner = ownerAccessor.OwnerId;
-        var row = await db.Trips.SingleOrDefaultAsync(x => x.OwnerId == owner, cancellationToken);
+        var row = await LockTripAsync(db, owner, cancellationToken);
         if (row is null) return new ReplaceResult.Conflict(NewSnapshot());
-        if (row.Version != expectedVersion) return new ReplaceResult.Conflict(Read(row));
+        if (row.Version != expectedVersion)
+        {
+            var current = Read(row);
+            await EnrichPhotosAsync(current, owner, cancellationToken);
+            return new ReplaceResult.Conflict(current);
+        }
         try { ValidateAndNormalize(input); }
         catch (ArgumentException) { return new ReplaceResult.Invalid(); }
         input.Version = expectedVersion + 1;
         row.Version = input.Version;
-        row.Json = JsonSerializer.Serialize(input, JsonOptions);
+        row.Json = SerializeForPersistence(input);
         row.UpdatedAt = DateTimeOffset.UtcNow;
-        try { await db.SaveChangesAsync(cancellationToken); }
+        var ids = input.Places.Select(x => x.Id).ToArray();
+        var deletedPhotos = await db.PlacePhotos.Where(x => x.OwnerId == owner && !ids.Contains(x.PlaceId)).ToArrayAsync(cancellationToken);
+        foreach (var photo in deletedPhotos)
+            db.PhotoObjectDeletions.Add(new PhotoObjectDeletion { ObjectKey = photo.ObjectKey, NotBefore = DateTimeOffset.UtcNow });
+        db.PlacePhotos.RemoveRange(deletedPhotos);
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+            if (transaction is not null) await transaction.CommitAsync(cancellationToken);
+        }
         catch (DbUpdateConcurrencyException)
         {
+            if (transaction is not null) await transaction.RollbackAsync(cancellationToken);
+            db.ChangeTracker.Clear();
             // Reset tracked values too, so another tool call in this scope reads the winner.
-            await db.Entry(row).ReloadAsync(cancellationToken);
-            return new ReplaceResult.Conflict(Read(row));
+            var actual = await db.Trips.SingleAsync(x => x.OwnerId == owner, cancellationToken);
+            var current = Read(actual);
+            await EnrichPhotosAsync(current, owner, cancellationToken);
+            return new ReplaceResult.Conflict(current);
         }
-        return new ReplaceResult.Success(input);
+        var saved = Read(row);
+        await EnrichPhotosAsync(saved, owner, cancellationToken);
+        return new ReplaceResult.Success(saved);
     }
 
     public async Task<IReadOnlyList<Place>> SearchPlacesAsync(string? query, string? city, CancellationToken cancellationToken = default)
@@ -79,7 +104,7 @@ public sealed class TripService(TripDbContext db, OwnerAccessor ownerAccessor)
         if (!File.Exists(path) || await db.Trips.AnyAsync(x => x.OwnerId == ownerId, cancellationToken)) return;
         var snapshot = JsonSerializer.Deserialize<TripSnapshot>(await File.ReadAllTextAsync(path, cancellationToken), JsonOptions) ?? NewSnapshot();
         ValidateAndNormalize(snapshot);
-        var row = new TripDocumentRow { Id = Guid.NewGuid(), OwnerId = ownerId, Version = snapshot.Version, Json = JsonSerializer.Serialize(snapshot, JsonOptions), UpdatedAt = DateTimeOffset.UtcNow };
+        var row = new TripDocumentRow { Id = Guid.NewGuid(), OwnerId = ownerId, Version = snapshot.Version, Json = SerializeForPersistence(snapshot), UpdatedAt = DateTimeOffset.UtcNow };
         await db.Trips.AddAsync(row, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
     }
@@ -89,6 +114,44 @@ public sealed class TripService(TripDbContext db, OwnerAccessor ownerAccessor)
         var snapshot = JsonSerializer.Deserialize<TripSnapshot>(row.Json, JsonOptions) ?? NewSnapshot();
         snapshot.Version = row.Version;
         return snapshot;
+    }
+
+    internal static async Task<TripDocumentRow?> LockTripAsync(TripDbContext db, string owner, CancellationToken ct)
+    {
+        // Serialize metadata mutations before touching the unique place-photo row.
+        // Refresh earlier reads in this request after acquiring the PostgreSQL lock.
+        db.ChangeTracker.Clear();
+        return db.Database.IsNpgsql()
+            ? await db.Trips.FromSqlInterpolated($"SELECT * FROM \"Trips\" WHERE \"OwnerId\" = {owner} FOR UPDATE").SingleOrDefaultAsync(ct)
+            : await db.Trips.SingleOrDefaultAsync(x => x.OwnerId == owner, ct);
+    }
+
+    private async Task EnrichPhotosAsync(TripSnapshot snapshot, string owner, CancellationToken cancellationToken)
+    {
+        foreach (var place in snapshot.Places) place.Photo = null;
+        if (snapshot.Places.Count == 0) return;
+        var ids = snapshot.Places.Select(x => x.Id).ToArray();
+        var photos = await db.PlacePhotos.Where(x => x.OwnerId == owner && ids.Contains(x.PlaceId)).ToArrayAsync(cancellationToken);
+        foreach (var row in photos)
+            if (snapshot.Places.FirstOrDefault(x => x.Id == row.PlaceId) is { } place)
+                place.Photo = ToDescriptor(row);
+    }
+
+    internal static PhotoDescriptor ToDescriptor(PlacePhotoRow row) => new(
+        row.Id,
+        $"/api/places/{Uri.EscapeDataString(row.PlaceId)}/photo?v={row.Id:N}",
+        row.SourceUrl,
+        row.Author,
+        row.Caption,
+        row.Kind,
+        row.License);
+
+    internal static string SerializeForPersistence(TripSnapshot snapshot)
+    {
+        var node = JsonSerializer.SerializeToNode(snapshot, JsonOptions)!.AsObject();
+        if (node["places"] is JsonArray places)
+            foreach (var place in places.OfType<JsonObject>()) place.Remove("photo");
+        return node.ToJsonString(JsonOptions);
     }
 
     private static TripSnapshot NewSnapshot() => new() { Version = 1, Trip = new() };

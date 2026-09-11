@@ -52,7 +52,17 @@ public sealed class Place
     public bool Selected { get; set; }
     public bool? ReservationRequired { get; set; }
     public string? OpeningHours { get; set; }
+    public PhotoDescriptor? Photo { get; set; }
 }
+
+public sealed record PhotoDescriptor(
+    Guid Id,
+    string Url,
+    string? SourceUrl,
+    string? Author,
+    string? Caption,
+    string Kind,
+    string? License);
 
 public sealed class Stay
 {
