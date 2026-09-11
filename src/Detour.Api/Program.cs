@@ -39,6 +39,7 @@ var secured = !allowLocalDev;
 var googleClientId = builder.Configuration["Auth:Google:ClientId"];
 var googleClientSecret = builder.Configuration["Auth:Google:ClientSecret"];
 var oauthScope = builder.Configuration["Auth:OAuth:Scope"] ?? "tripadvisor_api";
+var oauthResource = OAuthResource.GetIdentifier(builder.Configuration);
 if (!builder.Environment.IsDevelopment())
 {
     if (!Uri.TryCreate(issuer, UriKind.Absolute, out var configuredIssuer))
@@ -102,6 +103,7 @@ builder.Services.AddOpenIddict()
         options.AllowAuthorizationCodeFlow().AllowRefreshTokenFlow().RequireProofKeyForCodeExchange();
         options.AcceptAnonymousClients();
         options.RegisterScopes(OpenIddictConstants.Scopes.OpenId, OpenIddictConstants.Scopes.Profile, OpenIddictConstants.Scopes.Email, OpenIddictConstants.Scopes.OfflineAccess, oauthScope);
+        options.RegisterResources(oauthResource);
         options.SetAccessTokenLifetime(TimeSpan.FromHours(1));
         if (!string.IsNullOrWhiteSpace(issuer)) options.SetIssuer(new Uri(issuer));
         if (builder.Environment.IsDevelopment())
@@ -115,7 +117,7 @@ builder.Services.AddOpenIddict()
     {
         options.UseAspNetCore();
         options.UseLocalServer();
-        options.AddAudiences(oauthScope);
+        options.AddAudiences(oauthResource);
     });
 
 if (!builder.Environment.IsDevelopment())
@@ -207,12 +209,12 @@ var putTrip = app.MapPut("/api/trip", async (TripSnapshot request, TripService s
     };
 });
 if (secured) { getTrip.RequireAuthorization("trip-data"); putTrip.RequireAuthorization("trip-data"); }
-app.MapGet("/.well-known/oauth-protected-resource", (HttpRequest request) =>
+app.MapGet("/.well-known/oauth-protected-resource", () =>
 {
-    var resource = $"{request.Scheme}://{request.Host}/mcp";
+    var resource = oauthResource;
     return Results.Ok(new { resource, authorization_servers = string.IsNullOrWhiteSpace(issuer) ? Array.Empty<string>() : new[] { issuer } });
 });
-app.MapGet("/.well-known/oauth-protected-resource/mcp", (HttpRequest request) => Results.Ok(new { resource = $"{request.Scheme}://{request.Host}/mcp", authorization_servers = string.IsNullOrWhiteSpace(issuer) ? Array.Empty<string>() : new[] { issuer! } }));
+app.MapGet("/.well-known/oauth-protected-resource/mcp", () => Results.Ok(new { resource = oauthResource, authorization_servers = string.IsNullOrWhiteSpace(issuer) ? Array.Empty<string>() : new[] { issuer! } }));
 app.MapGet("/auth/login", (HttpRequest request, SignInManager<ApplicationUser> signInManager) =>
 {
     if (string.IsNullOrWhiteSpace(googleClientId) || string.IsNullOrWhiteSpace(googleClientSecret))
@@ -280,7 +282,7 @@ app.MapGet("/connect/authorize", async (HttpContext context, UserManager<Applica
     identity.AddClaim(new Claim(OpenIddictConstants.Claims.Name, user.UserName ?? user.Email ?? user.Id));
     if (!string.IsNullOrWhiteSpace(user.Email)) identity.AddClaim(new Claim(OpenIddictConstants.Claims.Email, user.Email));
     identity.SetScopes(request.GetScopes());
-    identity.SetResources(oauthScope);
+    identity.SetResources(oauthResource);
     foreach (var claim in identity.Claims)
         claim.SetDestinations(OpenIddictConstants.Destinations.AccessToken, OpenIddictConstants.Destinations.IdentityToken);
     return Results.SignIn(new ClaimsPrincipal(identity), properties: null, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
