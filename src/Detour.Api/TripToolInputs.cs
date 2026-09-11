@@ -7,6 +7,8 @@ namespace Detour.Api;
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed class PlaceChanges
 {
+    private PhotoInput? photo;
+
     public string? Name { get; set; }
     public string? City { get; set; }
     public string? Area { get; set; }
@@ -25,6 +27,43 @@ public sealed class PlaceChanges
     public bool? Selected { get; set; }
     public bool? ReservationRequired { get; set; }
     public string? OpeningHours { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
+    [Description("Photo change. Omit to preserve the current photo, use null to remove it, or provide a public image URL and optional attribution to import and replace it.")]
+    public PhotoInput? Photo
+    {
+        get => photo;
+        set
+        {
+            photo = value;
+            PhotoSpecified = true;
+        }
+    }
+
+    [JsonIgnore]
+    public bool PhotoSpecified { get; private set; }
+}
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed class PhotoInput
+{
+    [Description("Direct public HTTP(S) image URL. Private, local, credential-bearing, and non-standard-port URLs are rejected.")]
+    public required string Url { get; set; }
+
+    [Description("HTTP(S) page where the image came from, retained for attribution.")]
+    public string? SourceUrl { get; set; }
+
+    [Description("Image author or photographer, when known.")]
+    public string? Author { get; set; }
+
+    [Description("Short display caption.")]
+    public string? Caption { get; set; }
+
+    [Description("One of place, neighbourhood, or illustrative. Defaults to place.")]
+    public string? Kind { get; set; }
+
+    [Description("Image license, when known.")]
+    public string? License { get; set; }
 }
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]

@@ -8,27 +8,10 @@ public sealed class PlacePhotoService(
     TripDbContext db,
     OwnerAccessor ownerAccessor,
     TripService trips,
-    PhotoDownloader downloader,
     IPhotoObjectStore objects,
     ILogger<PlacePhotoService> logger)
 {
     private static readonly string[] Kinds = ["place", "neighbourhood", "illustrative"];
-
-    public async Task<PhotoOperationResult> ImportAsync(string placeId, string imageUrl, string? sourceUrl, string? author, string? caption, string? kind, string? license, long expectedVersion, CancellationToken ct)
-    {
-        var current = await trips.GetSnapshotAsync(ct);
-        var place = current.Places.FirstOrDefault(x => x.Id == placeId);
-        if (place is null) return Failure(current.Version, "not_found", $"Place '{placeId}' was not found.");
-        if (current.Version != expectedVersion) return Failure(current.Version, "version_conflict", "The trip changed. Re-read it and retry with the current version.", place.Photo);
-        if (!string.IsNullOrWhiteSpace(sourceUrl))
-            try { PhotoDownloader.ValidateUri(sourceUrl); } catch (InvalidOperationException ex) { return Failure(current.Version, "invalid_source_url", ex.Message, place.Photo); }
-        kind = string.IsNullOrWhiteSpace(kind) ? "place" : kind.Trim().ToLowerInvariant();
-        if (!Kinds.Contains(kind, StringComparer.Ordinal)) return Failure(current.Version, "invalid_kind", "kind must be place, neighbourhood, or illustrative.", place.Photo);
-        if (sourceUrl?.Length > 2048 || caption?.Length > 500 || author?.Length > 500 || license?.Length > 500) return Failure(current.Version, "invalid_metadata", "Photo metadata is too long.", place.Photo);
-
-        using var downloaded = await downloader.DownloadAsync(imageUrl, ct);
-        return await StoreDownloadedAsync(placeId, sourceUrl, author, caption, kind, license, expectedVersion, downloaded, ct);
-    }
 
     public async Task<PhotoOperationResult> ImportUploadedAsync(string placeId, Stream content, string? sourceUrl, string? author, string? caption, string? kind, string? license, long expectedVersion, CancellationToken ct)
     {

@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Detour.Api;
 
-public sealed class TripService(TripDbContext db, OwnerAccessor ownerAccessor)
+public sealed class TripService(TripDbContext db, OwnerAccessor ownerAccessor, PhotoImportService? photoImports = null)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -30,44 +30,83 @@ public sealed class TripService(TripDbContext db, OwnerAccessor ownerAccessor)
     public async Task<ReplaceResult> ReplaceAsync(TripSnapshot input, long expectedVersion, CancellationToken cancellationToken = default)
     {
         if (expectedVersion < 0 || input.Trip is null || input.Trip.StartDate > input.Trip.EndDate) return new ReplaceResult.Invalid();
-        await using var transaction = db.Database.IsRelational() ? await db.Database.BeginTransactionAsync(cancellationToken) : null;
         var owner = ownerAccessor.OwnerId;
-        var row = await LockTripAsync(db, owner, cancellationToken);
+        try { ValidateAndNormalize(input); }
+        catch (ArgumentException) { return new ReplaceResult.Invalid(); }
+        var before = await db.Trips.AsNoTracking().SingleOrDefaultAsync(x => x.OwnerId == owner, cancellationToken);
+        if (before is null) return new ReplaceResult.Conflict(NewSnapshot());
+        if (before.Version != expectedVersion)
+        {
+            var current = Read(before);
+            await EnrichPhotosAsync(current, owner, cancellationToken);
+            return new ReplaceResult.Conflict(current);
+        }
+        var storedPhotos = await db.PlacePhotos.AsNoTracking().Where(x => x.OwnerId == owner).ToDictionaryAsync(x => x.PlaceId, cancellationToken);
+        var staged = new Dictionary<string, PlacePhotoRow>();
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromMinutes(2));
+        try
+        {
+            foreach (var place in input.Places.Where(x => x.PhotoSpecified && x.Photo is not null))
+            {
+                // The read model's private URL is a reference, never a download source.
+                if (storedPhotos.TryGetValue(place.Id, out var stored) && place.Photo!.Url == ToDescriptor(stored).Url) continue;
+                if (photoImports is null) return new ReplaceResult.PhotoFailed("Photo importing is not configured.");
+                staged.Add(place.Id, await photoImports.StageAsync(owner, place, timeout.Token));
+            }
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return new ReplaceResult.PhotoFailed("Photo import timed out. The place and existing photo were not changed.");
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or HttpRequestException or TimeoutException or
+            SixLabors.ImageSharp.UnknownImageFormatException or SixLabors.ImageSharp.InvalidImageContentException or
+            PhotoStorageUnavailableException or Amazon.S3.AmazonS3Exception)
+        {
+            return new ReplaceResult.PhotoFailed("Could not import the photo. Check the image URL, format, size, and storage availability. The place and existing photo were not changed.");
+        }
+        await using var transaction = db.Database.IsRelational() ? await db.Database.BeginTransactionAsync(timeout.Token) : null;
+        var row = await LockTripAsync(db, owner, timeout.Token);
         if (row is null) return new ReplaceResult.Conflict(NewSnapshot());
         if (row.Version != expectedVersion)
         {
             var current = Read(row);
-            await EnrichPhotosAsync(current, owner, cancellationToken);
+            await EnrichPhotosAsync(current, owner, timeout.Token);
             return new ReplaceResult.Conflict(current);
         }
-        try { ValidateAndNormalize(input); }
-        catch (ArgumentException) { return new ReplaceResult.Invalid(); }
         input.Version = expectedVersion + 1;
         row.Version = input.Version;
         row.Json = SerializeForPersistence(input);
         row.UpdatedAt = DateTimeOffset.UtcNow;
         var ids = input.Places.Select(x => x.Id).ToArray();
-        var deletedPhotos = await db.PlacePhotos.Where(x => x.OwnerId == owner && !ids.Contains(x.PlaceId)).ToArrayAsync(cancellationToken);
+        var changedPhotoIds = input.Places.Where(x => x.PhotoSpecified && x.Photo is null).Select(x => x.Id).Concat(staged.Keys).ToArray();
+        var deletedPhotos = await db.PlacePhotos.Where(x => x.OwnerId == owner && (!ids.Contains(x.PlaceId) || changedPhotoIds.Contains(x.PlaceId))).ToArrayAsync(timeout.Token);
         foreach (var photo in deletedPhotos)
             db.PhotoObjectDeletions.Add(new PhotoObjectDeletion { ObjectKey = photo.ObjectKey, NotBefore = DateTimeOffset.UtcNow });
         db.PlacePhotos.RemoveRange(deletedPhotos);
+        foreach (var photo in staged.Values)
+        {
+            db.PlacePhotos.Add(photo);
+            var reservation = await db.PhotoObjectDeletions.SingleAsync(x => x.ObjectKey == photo.ObjectKey, timeout.Token);
+            db.PhotoObjectDeletions.Remove(reservation);
+        }
         try
         {
-            await db.SaveChangesAsync(cancellationToken);
-            if (transaction is not null) await transaction.CommitAsync(cancellationToken);
+            await db.SaveChangesAsync(timeout.Token);
+            if (transaction is not null) await transaction.CommitAsync(timeout.Token);
         }
         catch (DbUpdateConcurrencyException)
         {
-            if (transaction is not null) await transaction.RollbackAsync(cancellationToken);
+            if (transaction is not null) await transaction.RollbackAsync(timeout.Token);
             db.ChangeTracker.Clear();
             // Reset tracked values too, so another tool call in this scope reads the winner.
-            var actual = await db.Trips.SingleAsync(x => x.OwnerId == owner, cancellationToken);
+            var actual = await db.Trips.SingleAsync(x => x.OwnerId == owner, timeout.Token);
             var current = Read(actual);
-            await EnrichPhotosAsync(current, owner, cancellationToken);
+            await EnrichPhotosAsync(current, owner, timeout.Token);
             return new ReplaceResult.Conflict(current);
         }
         var saved = Read(row);
-        await EnrichPhotosAsync(saved, owner, cancellationToken);
+        await EnrichPhotosAsync(saved, owner, timeout.Token);
         return new ReplaceResult.Success(saved);
     }
 

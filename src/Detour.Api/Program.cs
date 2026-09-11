@@ -23,6 +23,7 @@ builder.Services.AddScoped<TripService>();
 builder.Services.AddScoped<TripItemEditor>();
 builder.Services.AddScoped<PlacePhotoService>();
 builder.Services.AddScoped<PhotoDownloader>();
+builder.Services.AddScoped<PhotoImportService>();
 builder.Services.AddHostedService<PhotoCleanupWorker>();
 builder.Services.AddAntiforgery(options => options.HeaderName = "X-CSRF-TOKEN");
 builder.Services.Configure<FormOptions>(options => options.MultipartBodyLengthLimit = PhotoDownloader.MaxDownloadBytes + 1024 * 1024);
@@ -155,7 +156,7 @@ builder.Services.AddAuthorization(options =>
                 .Contains(oauthScope, StringComparer.Ordinal)));
 });
 
-builder.Services.AddMcpServer().WithHttpTransport(options => options.Stateless = false).WithTools<TripMcpTools>().WithTools<PhotoMcpTools>();
+builder.Services.AddMcpServer().WithHttpTransport(options => options.Stateless = false).WithTools<TripMcpTools>();
 builder.Services.AddScoped<OpenIddictInitializer>();
 var app = builder.Build();
 app.UseDefaultFiles();
@@ -238,7 +239,8 @@ var putTrip = app.MapPut("/api/trip", async (TripSnapshot request, TripService s
     {
         ReplaceResult.Success success => Results.Ok(success.Snapshot),
         ReplaceResult.Conflict conflict => Results.Conflict(conflict.Snapshot),
-        ReplaceResult.Invalid => Results.BadRequest(new { error = "invalid_trip" }),
+            ReplaceResult.Invalid => Results.BadRequest(new { error = "invalid_trip" }),
+            ReplaceResult.PhotoFailed failed => Results.BadRequest(new { error = "photo_import_failed", message = failed.Message }),
         _ => Results.BadRequest(new { error = "invalid_trip" })
     };
 });
@@ -249,7 +251,6 @@ var getPhoto = app.MapGet("/api/places/{placeId}/photo", async (string placeId, 
     response.Headers.CacheControl = "private, no-store";
     return Results.Stream(photo.Content, photo.ContentType, enableRangeProcessing: true);
 });
-var importPhoto = app.MapPost("/api/places/{placeId}/photo", async (string placeId, ImportPhotoRequest request, PlacePhotoService photos, CancellationToken ct) => PhotoResult(await photos.ImportAsync(placeId, request.ImageUrl, request.SourceUrl, request.Author, request.Caption, request.Kind, request.License, request.ExpectedVersion, ct)));
 var uploadPhoto = app.MapPost("/api/places/{placeId}/photo/upload", async (string placeId, HttpRequest request, PlacePhotoService photos, CancellationToken ct) =>
 {
     var form = await request.ReadFormAsync(ct);
@@ -262,7 +263,7 @@ var uploadPhoto = app.MapPost("/api/places/{placeId}/photo/upload", async (strin
 });
 var removePhoto = app.MapDelete("/api/places/{placeId}/photo", async (string placeId, [FromBody] RemovePhotoRequest request, PlacePhotoService photos, CancellationToken ct) => PhotoResult(await photos.RemoveAsync(placeId, request.ExpectedVersion, ct)));
 if (secured) { getTrip.RequireAuthorization("trip-data"); putTrip.RequireAuthorization("trip-data"); }
-if (secured) { getPhoto.RequireAuthorization("trip-data"); importPhoto.RequireAuthorization("trip-data"); uploadPhoto.RequireAuthorization("trip-data"); removePhoto.RequireAuthorization("trip-data"); }
+if (secured) { getPhoto.RequireAuthorization("trip-data"); uploadPhoto.RequireAuthorization("trip-data"); removePhoto.RequireAuthorization("trip-data"); }
 app.MapGet("/.well-known/oauth-protected-resource", () =>
 {
     var resource = oauthResource;
@@ -363,5 +364,4 @@ static IResult PhotoResult(PhotoOperationResult result) => result.Success ? Resu
 };
 public partial class Program { }
 
-public sealed record ImportPhotoRequest(string ImageUrl, string? SourceUrl, string? Author, string? Caption, string? Kind, string? License, long ExpectedVersion);
 public sealed record RemovePhotoRequest(long ExpectedVersion);

@@ -11,7 +11,7 @@ public sealed class PlacePhotoServiceTests
     private const string TinyPng = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 
     [Fact]
-    public async Task Uploaded_photo_is_preserved_when_full_trip_put_contains_forged_photo_metadata()
+    public async Task Full_trip_put_rejects_unknown_private_photo_url_without_changing_the_trip()
     {
         await using var db = CreateDb();
         var trips = CreateTripService(db, "owner-a");
@@ -32,11 +32,13 @@ public sealed class PlacePhotoServiceTests
         forged.Photo = new PhotoDescriptor(Guid.NewGuid(), "/forged", "https://evil.test", "Evil", "forged", "place", null);
         forged.Name = "Ginza renamed";
         var replaced = await trips.ReplaceAsync(current, current.Version, CancellationToken.None);
-        var canonical = Assert.IsType<ReplaceResult.Success>(replaced).Snapshot;
+        Assert.IsType<ReplaceResult.PhotoFailed>(replaced);
 
+        var canonical = await trips.GetSnapshotAsync();
         var photo = Assert.Single(canonical.Places).Photo;
         Assert.Equal(imported.Photo!.Id, photo!.Id);
-        Assert.Equal("Ginza renamed", canonical.Places[0].Name);
+        Assert.Equal("Ginza", canonical.Places[0].Name);
+        Assert.Equal(current.Version, canonical.Version);
         Assert.Single(db.PlacePhotos);
     }
 
@@ -149,11 +151,10 @@ public sealed class PlacePhotoServiceTests
         context.Request.Host = new HostString("localhost");
         context.User = new ClaimsPrincipal(new ClaimsIdentity([new Claim("sub", owner)], "test"));
         var accessor = new OwnerAccessor(new FixedHttpContextAccessor(context), new ConfigurationBuilder().AddInMemoryCollection().Build());
-        return new(db, accessor, trips, new PhotoDownloader(new EmptyHttpClientFactory()), store, NullLogger<PlacePhotoService>.Instance);
+        return new(db, accessor, trips, store, NullLogger<PlacePhotoService>.Instance);
     }
 
     private sealed class FixedHttpContextAccessor(HttpContext context) : IHttpContextAccessor { public HttpContext? HttpContext { get; set; } = context; }
-    private sealed class EmptyHttpClientFactory : IHttpClientFactory { public HttpClient CreateClient(string name) => new(); }
     private sealed class FakePhotoStore : IPhotoObjectStore
     {
         public Dictionary<string, byte[]> Objects { get; } = [];

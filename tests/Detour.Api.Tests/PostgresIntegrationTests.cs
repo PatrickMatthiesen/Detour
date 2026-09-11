@@ -581,14 +581,13 @@ public sealed class PostgresIntegrationTests : IAsyncLifetime
         var store = new HttpPhotoStore();
         await using var db1 = CreateDb();
         await using var db2 = CreateDb();
-        var service1 = CreateService(db1, "photo-race-owner");
-        var service2 = CreateService(db2, "photo-race-owner");
-        var photo1 = CreatePhotoService(db1, service1, "photo-race-owner", store);
-        var photo2 = CreatePhotoService(db2, service2, "photo-race-owner", store);
-        await service1.GetSnapshotAsync();
-        await service2.GetSnapshotAsync();
-        var left = photo1.ImportUploadedAsync("photo-race-place", new MemoryStream(Convert.FromBase64String(TinyPng)), "https://example.test/one", null, "one", "place", null, saved.Snapshot.Version, CancellationToken.None);
-        var right = photo2.ImportUploadedAsync("photo-race-place", new MemoryStream(Convert.FromBase64String(TinyPng)), "https://example.test/two", null, "two", "place", null, saved.Snapshot.Version, CancellationToken.None);
+        var downloader = new PhotoDownloader(new StaticPhotoHttpClientFactory());
+        var service1 = new TripService(db1, PhotoOwner("photo-race-owner"), new PhotoImportService(db1, downloader, store));
+        var service2 = new TripService(db2, PhotoOwner("photo-race-owner"), new PhotoImportService(db2, downloader, store));
+        var left = new TripItemEditor(service1).EditAsync("places", "update", "photo-race-place",
+            System.Text.Json.Nodes.JsonNode.Parse("""{"photo":{"url":"https://images.example.test/one.png"}}""")!.AsObject(), saved.Snapshot.Version);
+        var right = new TripItemEditor(service2).EditAsync("places", "update", "photo-race-place",
+            System.Text.Json.Nodes.JsonNode.Parse("""{"photo":{"url":"https://images.example.test/two.png"}}""")!.AsObject(), saved.Snapshot.Version);
         var results = await Task.WhenAll(left, right);
         Assert.Equal(1, results.Count(x => x.Success));
         Assert.Equal(1, results.Count(x => x.Error == "version_conflict"));
@@ -613,6 +612,26 @@ public sealed class PostgresIntegrationTests : IAsyncLifetime
         Assert.Equal(returnPath, Assert.IsType<Uri>(completed.Headers.Location).OriginalString);
     }
 
+    private static OwnerAccessor PhotoOwner(string owner)
+    {
+        var context = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity([new Claim("sub", owner)], "test")) };
+        return new OwnerAccessor(new FixedHttpContextAccessor(context), new ConfigurationBuilder().Build());
+    }
+
+    private sealed class StaticPhotoHttpClientFactory : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name) => new(new StaticPhotoHandler());
+        private sealed class StaticPhotoHandler : HttpMessageHandler
+        {
+            protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+            {
+                var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(Convert.FromBase64String(TinyPng)) };
+                response.Content.Headers.ContentType = new("image/png");
+                return Task.FromResult(response);
+            }
+        }
+    }
+
     private const string TinyPng = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 
     private static PlacePhotoService CreatePhotoService(TripDbContext db, TripService service, string owner, HttpPhotoStore store)
@@ -621,7 +640,7 @@ public sealed class PostgresIntegrationTests : IAsyncLifetime
         context.Request.Host = new HostString("localhost");
         context.User = new ClaimsPrincipal(new ClaimsIdentity([new Claim("sub", owner)], "test"));
         var accessor = new OwnerAccessor(new FixedHttpContextAccessor(context), new ConfigurationBuilder().AddInMemoryCollection().Build());
-        return new PlacePhotoService(db, accessor, service, new PhotoDownloader(new EmptyHttpClientFactory()), store, NullLogger<PlacePhotoService>.Instance);
+        return new PlacePhotoService(db, accessor, service, store, NullLogger<PlacePhotoService>.Instance);
     }
 
     private sealed class EmptyHttpClientFactory : IHttpClientFactory { public HttpClient CreateClient(string name) => new(); }
