@@ -1,9 +1,9 @@
 # The independent integration is distributed as a versioned GitHub release until
 # it is published on NuGet.org. Never depend on a sibling checkout or commit binaries.
 $ErrorActionPreference = 'Stop'
-$version = '0.1.0-preview.3'
-$expectedHash = '2EDB32CE333BE5562AE7FE9B44D2977A8E5A7CFD9EB21F11FD94291F6A758E3D'
-$packageName = "CommunityToolkit.Aspire.Hosting.Garage.$version.nupkg"
+$version = '0.1.0-preview.4'
+$expectedHash = '8146F269D97C91F5A4A16676104A874D433BABC0EA575A8F34ECB34219228A48'
+$packageName = "Aspire.Hosting.Garage.$version.nupkg"
 $packageDirectory = Join-Path $PSScriptRoot '../.local/packages'
 $packagePath = Join-Path $packageDirectory $packageName
 New-Item -ItemType Directory -Force -Path $packageDirectory | Out-Null
@@ -12,7 +12,7 @@ if ((Test-Path -LiteralPath $packagePath) -and (Get-FileHash -LiteralPath $packa
     exit 0
 }
 $downloadPath = "$packagePath.download"
-Invoke-WebRequest "https://github.com/PatrickMatthiesen/CommunityToolkit.Aspire.Hosting.Garage/releases/download/v$version/$packageName" -OutFile $downloadPath
+Invoke-WebRequest "https://github.com/PatrickMatthiesen/Aspire.Hosting.Garage/releases/download/v$version/$packageName" -OutFile $downloadPath
 if ((Get-FileHash -LiteralPath $downloadPath).Hash -ne $expectedHash) {
     throw 'Garage package checksum does not match the pinned release.'
 }

@@ -1,12 +1,12 @@
 #:package Aspire.Hosting.JavaScript@13.6.0-preview.1.26455.1
 #:package Aspire.Hosting.PostgreSQL@13.6.0-preview.1.26455.1
 #:package Aspire.Hosting.Docker@13.6.0-preview.1.26455.1
-#:package CommunityToolkit.Aspire.Hosting.Garage@0.1.0-preview.3
+#:package Aspire.Hosting.Garage@0.1.0-preview.4
 #:sdk Aspire.AppHost.Sdk@13.6.0-preview.1.26421.15
 #:property AspireUseCliBundle=true
 #:property NoWarn=ASPIRECSHARPAPPS001
 
-using CommunityToolkit.Aspire.Hosting.Garage;
+using Aspire.Hosting.Garage;
 
 var builder = DistributedApplication.CreateBuilder(args);
 
@@ -23,7 +23,7 @@ var tripDb = postgres.AddDatabase("tripdb");
 
 var garage = builder.AddGarage("garage")
     .WithDataVolume(builder.ExecutionContext.IsPublishMode ? "detour-garage-data" : null);
-garage.Resource.Provisioner.WithImageSHA256("ea1fdf651a6ee84c20460a71d768d062370cfa95184bdf586d6e0efc81ef885c");
+garage.Resource.Provisioner.WithImageSHA256("a0ae9065b288fc99d0b5a5bc6a45e0f596d1dc50be5e6bf042dd5eadfe75ed9e");
 var photos = garage.AddBucket("photos", "detour-place-photos");
 
 var api = builder.AddCSharpApp("api", "src/Detour.Api")

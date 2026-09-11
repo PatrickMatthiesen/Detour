@@ -81,6 +81,6 @@ The working app opens at `/` (Places), `/plan` (daily planning and whole-trip ca
 
 Place photos live in a private Garage bucket, not in this repository or the frontend deployment. Each place can have one photo with its source, author, caption and license. The API authenticates photo requests; it does not expose Garage credentials or public object URLs. Neighbourhood and illustrative photos are labelled, and unavailable photos show a placeholder.
 
-The independent [Garage hosting integration](https://github.com/PatrickMatthiesen/CommunityToolkit.Aspire.Hosting.Garage) targets stable Aspire 13.5.3; Detour retains its preview AppHost. `scripts/restore-garage.ps1` fetches a checksum-pinned package from its public GitHub release into the ignored local NuGet feed. CI and deployment run the same restore. The provisioner image is also pinned by digest. This preview is not an official Community Toolkit or NuGet.org release.
+The [Garage integration](https://github.com/PatrickMatthiesen/Aspire.Hosting.Garage) is restored by `scripts/restore-garage.ps1` from a checksum-pinned GitHub release. CI and deployment use the same script. The provisioner image is pinned by digest.
 
 See [photo imports and migration](docs/photos.md) for agent tools and importing existing pictures.
