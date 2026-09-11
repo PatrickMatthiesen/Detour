@@ -21,7 +21,45 @@ jobs:
 
   verify:
     needs: verify-ref
-    uses: ./.github/workflows/ci.yml
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      actions: read
+    steps:
+      - name: Require successful CI for this commit
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const deadline = Date.now() + 10 * 60 * 1000;
+            while (true) {
+              const { data } = await github.rest.actions.listWorkflowRuns({
+                ...context.repo,
+                workflow_id: 'ci.yml',
+                head_sha: context.sha,
+                branch: 'main',
+                event: 'push',
+                per_page: 1,
+              });
+              const run = data.workflow_runs[0];
+              if (!run) {
+                core.setFailed(`No main push CI run found for ${context.sha}. Run CI before deploying.`);
+                return;
+              }
+              if (run.status === 'completed') {
+                if (run.conclusion !== 'success') {
+                  core.setFailed(`CI ${run.conclusion} for ${context.sha}: ${run.html_url}`);
+                  return;
+                }
+                core.info(`CI passed for ${context.sha}: ${run.html_url}`);
+                return;
+              }
+              if (Date.now() >= deadline) {
+                core.setFailed(`Timed out waiting for CI: ${run.html_url}`);
+                return;
+              }
+              core.info(`Waiting for CI (${run.status}): ${run.html_url}`);
+              await new Promise(resolve => setTimeout(resolve, 15000));
+            }
 
   deploy:
     needs: verify
@@ -34,6 +72,8 @@ jobs:
       DEPLOY_USER: ${{ secrets.SSH_USER }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.x
