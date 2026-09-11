@@ -39,7 +39,19 @@ This writes Compose artifacts and parameter placeholders under `artifacts/compos
 
 ## ChatGPT MCP connection
 
-The API exposes MCP at `/mcp` using the official C# MCP SDK. It shares owner-scoped persistence and validation with the HTTP API. ASP.NET Core Identity with Google sign-in handles browser sessions; OpenIddict supplies OAuth authorization for ChatGPT. The optional local-development owner is restricted to explicitly enabled local development. See [authentication](docs/authentication.md) for credentials, client registration, and key configuration. Google sign-in and a live ChatGPT connection require configuration and end-to-end verification on the chosen hostname.
+The API exposes MCP at `/mcp` using the official C# MCP SDK. It shares owner-scoped persistence and validation with the HTTP API. ASP.NET Core Identity with Google sign-in handles browser sessions; OpenIddict supplies OAuth authorization for ChatGPT. The optional local-development owner is restricted to explicitly enabled local development.
+
+To configure the plugin in ChatGPT:
+
+1. Create a new plugin with **Server URL** `https://detour.patrickbm.com/mcp` and **Authentication** `OAuth`.
+2. Open **Advanced OAuth settings**. Choose **User-Defined OAuth Client**, enter client ID `detour-chatgpt`, leave the client secret empty, and select token endpoint auth method `none`.
+3. Check the discovered **Auth URL** is `https://detour.patrickbm.com/connect/authorize`, **Token URL** is `https://detour.patrickbm.com/connect/token`, and **Resource** is `https://detour.patrickbm.com/mcp`. Leave Registration URL empty; DCR/CIMD are not used.
+4. Select default scopes `openid`, `email`, `offline_access`, `profile`, and `tripadvisor_api`.
+5. Copy the displayed **Callback URL** (currently `https://chatgpt.com/connector_platform_oauth_redirect`) into Detour's `Auth__OAuth__RedirectUris__0` configuration. The server's `Auth__OAuth__ClientId` must match `detour-chatgpt`.
+6. Accept the custom MCP server warning, click **Create**, and complete Google sign-in with an allowed owner account.
+7. Start a chat with Detour enabled and ask it to read the trip overview to verify an authenticated tool call.
+
+The resource is the complete `/mcp` URL; `tripadvisor_api` is the permission scope. See [authentication](docs/authentication.md) for deployment credentials, OAuth discovery, and troubleshooting.
 
 See the [agent tool guide](docs/mcp-tools.md) for focused edits, partial-update semantics, paging, and conflict recovery.
 

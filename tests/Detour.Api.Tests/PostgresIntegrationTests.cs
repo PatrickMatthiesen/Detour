@@ -17,6 +17,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Npgsql;
 using Detour.Api;
+using OpenIddict.Abstractions;
 
 namespace Detour.Api.Tests;
 
@@ -265,6 +266,70 @@ public sealed class PostgresIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Protected_resource_metadata_advertises_the_canonical_mcp_resource()
+    {
+        if (!HasDatabase()) return;
+        var previousConnection = Environment.GetEnvironmentVariable("ConnectionStrings__tripdb");
+        var previousPublicUrl = Environment.GetEnvironmentVariable("Auth__PublicUrl");
+        Environment.SetEnvironmentVariable("ConnectionStrings__tripdb", connection);
+        Environment.SetEnvironmentVariable("Auth__PublicUrl", "https://detour.example.test");
+        try
+        {
+            using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.UseEnvironment("Development"));
+            using var response = await factory.CreateClient().GetAsync("/.well-known/oauth-protected-resource/mcp");
+            response.EnsureSuccessStatusCode();
+            var metadata = JsonSerializer.Deserialize<JsonElement>(await response.Content.ReadAsStringAsync(), JsonOptions);
+            Assert.Equal("https://detour.example.test/mcp", metadata.GetProperty("resource").GetString());
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("ConnectionStrings__tripdb", previousConnection);
+            Environment.SetEnvironmentVariable("Auth__PublicUrl", previousPublicUrl);
+        }
+    }
+
+    [Fact]
+    public async Task OAuth_initializer_reconciles_an_existing_scope_to_the_canonical_resource()
+    {
+        if (!HasDatabase()) return;
+        const string scope = "tripadvisor_api";
+        const string resource = "https://detour.example.test/mcp";
+        await using (var db = new NpgsqlConnection(connection))
+        {
+            await db.OpenAsync();
+            await using var command = db.CreateCommand();
+            command.CommandText = """
+                INSERT INTO "OpenIddictScopes" ("Id", "Name", "DisplayName", "Resources")
+                VALUES (@id, @name, 'stale resource', '["tripadvisor_api"]')
+                ON CONFLICT ("Name") DO UPDATE SET "DisplayName" = EXCLUDED."DisplayName", "Resources" = EXCLUDED."Resources"
+                """;
+            command.Parameters.AddWithValue("id", "stale-" + Guid.NewGuid().ToString("N"));
+            command.Parameters.AddWithValue("name", scope);
+            await command.ExecuteNonQueryAsync();
+        }
+
+        var previousConnection = Environment.GetEnvironmentVariable("ConnectionStrings__tripdb");
+        var previousPublicUrl = Environment.GetEnvironmentVariable("Auth__PublicUrl");
+        Environment.SetEnvironmentVariable("ConnectionStrings__tripdb", connection);
+        Environment.SetEnvironmentVariable("Auth__PublicUrl", "https://detour.example.test");
+        try
+        {
+            using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.UseEnvironment("Development"));
+            using var serviceScope = factory.Services.CreateScope();
+            var manager = serviceScope.ServiceProvider.GetRequiredService<IOpenIddictScopeManager>();
+            var existing = await manager.FindByNameAsync(scope);
+            Assert.NotNull(existing);
+            Assert.Equal("Detour data", await manager.GetDisplayNameAsync(existing!));
+            Assert.Equal(resource, Assert.Single(await manager.GetResourcesAsync(existing!)));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("ConnectionStrings__tripdb", previousConnection);
+            Environment.SetEnvironmentVariable("Auth__PublicUrl", previousPublicUrl);
+        }
+    }
+
+    [Fact]
     public async Task Google_login_challenge_preserves_identity_external_login_provider()
     {
         if (!HasDatabase()) return;
@@ -408,6 +473,25 @@ public sealed class PostgresIntegrationTests : IAsyncLifetime
         }
     }
 
+    private static async Task CompleteGoogleLoginAsync(HttpClient client, string returnPath)
+    {
+        using var login = await client.GetAsync($"/auth/login?returnUrl={Uri.EscapeDataString(returnPath)}");
+        Assert.Equal(HttpStatusCode.Redirect, login.StatusCode);
+        var authorization = Assert.IsType<Uri>(login.Headers.Location);
+        var state = QueryHelpers.ParseQuery(authorization.Query)["state"].ToString();
+        Assert.False(string.IsNullOrWhiteSpace(state));
+
+        using var googleCallback = await client.GetAsync($"/signin-google?code=test-code&state={Uri.EscapeDataString(state)}");
+        Assert.Equal(HttpStatusCode.Redirect, googleCallback.StatusCode);
+        var callback = Assert.IsType<Uri>(googleCallback.Headers.Location);
+        using var completed = await client.GetAsync(callback.OriginalString);
+        Assert.Equal(HttpStatusCode.Redirect, completed.StatusCode);
+        Assert.Equal(returnPath, Assert.IsType<Uri>(completed.Headers.Location).OriginalString);
+    }
+
+    private static string Base64UrlEncode(byte[] bytes)
+        => Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+
     private bool HasDatabase() => !string.IsNullOrWhiteSpace(connection);
 
     private TripDbContext CreateDb() => new(new DbContextOptionsBuilder<TripDbContext>().UseNpgsql(connection!).Options);
@@ -438,6 +522,174 @@ public sealed class PostgresIntegrationTests : IAsyncLifetime
         {
             Content = new StringContent(json, Encoding.UTF8, "application/json")
         };
+    }
+
+    [Fact]
+    public async Task Chatgpt_oauth_authorization_code_and_refresh_token_accept_the_canonical_resource()
+    {
+        if (!HasDatabase()) return;
+        var previousConnection = Environment.GetEnvironmentVariable("ConnectionStrings__tripdb");
+        var previousPublicUrl = Environment.GetEnvironmentVariable("Auth__PublicUrl");
+        var previousClientId = Environment.GetEnvironmentVariable("Auth__OAuth__ClientId");
+        var previousRedirect = Environment.GetEnvironmentVariable("Auth__OAuth__RedirectUris__0");
+        var previousGoogleClientId = Environment.GetEnvironmentVariable("Auth__Google__ClientId");
+        var previousGoogleClientSecret = Environment.GetEnvironmentVariable("Auth__Google__ClientSecret");
+        var previousAllowedEmail = Environment.GetEnvironmentVariable("Auth__AllowedEmails__0");
+        var previousLocalDev = Environment.GetEnvironmentVariable("Auth__AllowLocalDev");
+        Environment.SetEnvironmentVariable("ConnectionStrings__tripdb", connection);
+        Environment.SetEnvironmentVariable("Auth__PublicUrl", "https://detour.example.test");
+        Environment.SetEnvironmentVariable("Auth__OAuth__ClientId", "detour-chatgpt");
+        Environment.SetEnvironmentVariable("Auth__OAuth__RedirectUris__0", "https://chatgpt.com/connector_platform_oauth_redirect");
+        Environment.SetEnvironmentVariable("Auth__Google__ClientId", "regression-client");
+        Environment.SetEnvironmentVariable("Auth__Google__ClientSecret", "regression-secret");
+        Environment.SetEnvironmentVariable("Auth__AllowedEmails__0", "owner@example.test");
+        Environment.SetEnvironmentVariable("Auth__AllowLocalDev", "false");
+        try
+        {
+            using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+            {
+                builder.UseEnvironment("Development");
+                builder.ConfigureTestServices(services => services.PostConfigure<GoogleOptions>(
+                    GoogleDefaults.AuthenticationScheme, options =>
+                    {
+                        options.AuthorizationEndpoint = "https://accounts.google.test/o/oauth2/v2/auth";
+                        options.TokenEndpoint = "https://oauth2.google.test/token";
+                        options.UserInformationEndpoint = "https://oauth2.google.test/userinfo";
+                        options.Backchannel = new HttpClient(new GoogleBackchannelHandler("owner@example.test", true));
+                    }));
+            });
+            using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+            {
+                BaseAddress = new Uri("https://localhost"),
+                AllowAutoRedirect = false
+            });
+
+            await CompleteGoogleLoginAsync(client, "/connect/authorize");
+            using var oauthClient = factory.CreateClient(new WebApplicationFactoryClientOptions
+            {
+                BaseAddress = new Uri("https://localhost"),
+                AllowAutoRedirect = false,
+                HandleCookies = false
+            });
+            const string redirectUri = "https://chatgpt.com/connector_platform_oauth_redirect";
+            const string resource = "https://detour.example.test/mcp";
+            const string codeVerifier = "detour-chatgpt-code-verifier-012345678901234567890123456789";
+            var challenge = Base64UrlEncode(System.Security.Cryptography.SHA256.HashData(Encoding.ASCII.GetBytes(codeVerifier)));
+            var invalidResourceQuery = QueryHelpers.AddQueryString("/connect/authorize", new Dictionary<string, string?>
+            {
+                ["response_type"] = "code",
+                ["client_id"] = "detour-chatgpt",
+                ["redirect_uri"] = redirectUri,
+                ["scope"] = "openid profile email offline_access tripadvisor_api",
+                ["code_challenge"] = challenge,
+                ["code_challenge_method"] = "S256",
+                ["resource"] = "https://other.example.test/mcp"
+            });
+            using var invalidResource = await client.GetAsync(invalidResourceQuery);
+            Assert.Equal(HttpStatusCode.BadRequest, invalidResource.StatusCode);
+            Assert.Contains("invalid_target", await invalidResource.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
+
+            var query = QueryHelpers.AddQueryString("/connect/authorize", new Dictionary<string, string?>
+            {
+                ["response_type"] = "code",
+                ["client_id"] = "detour-chatgpt",
+                ["redirect_uri"] = redirectUri,
+                ["scope"] = "openid profile email offline_access tripadvisor_api",
+                ["code_challenge"] = challenge,
+                ["code_challenge_method"] = "S256",
+                ["resource"] = resource
+            });
+            using var authorize = await client.GetAsync(query);
+            Assert.True(authorize.StatusCode == HttpStatusCode.Redirect, await authorize.Content.ReadAsStringAsync());
+            var callback = Assert.IsType<Uri>(authorize.Headers.Location);
+            var callbackQuery = QueryHelpers.ParseQuery(callback.Query);
+            var code = callbackQuery["code"].ToString();
+            Assert.False(string.IsNullOrWhiteSpace(code));
+            Assert.Equal(redirectUri, $"{callback.Scheme}://{callback.Authority}{callback.AbsolutePath}");
+
+            using var token = await oauthClient.PostAsync("/connect/token", new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["grant_type"] = "authorization_code",
+                ["client_id"] = "detour-chatgpt",
+                ["redirect_uri"] = redirectUri,
+                ["code"] = code,
+                ["code_verifier"] = codeVerifier,
+                ["resource"] = resource
+            }));
+            token.EnsureSuccessStatusCode();
+            var tokenJson = JsonSerializer.Deserialize<JsonElement>(await token.Content.ReadAsStringAsync(), JsonOptions);
+            var accessToken = tokenJson.GetProperty("access_token").GetString();
+            var refreshToken = tokenJson.GetProperty("refresh_token").GetString();
+            Assert.False(string.IsNullOrWhiteSpace(accessToken));
+            Assert.False(string.IsNullOrWhiteSpace(refreshToken));
+
+            using var api = new HttpRequestMessage(HttpMethod.Get, "/api/trip");
+            api.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+            using var apiResponse = await oauthClient.SendAsync(api);
+            apiResponse.EnsureSuccessStatusCode();
+
+            using var initialize = new HttpRequestMessage(HttpMethod.Post, "/mcp")
+            {
+                Content = new StringContent("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{},\"clientInfo\":{\"name\":\"detour-regression\",\"version\":\"1.0\"}}}", Encoding.UTF8, "application/json")
+            };
+            initialize.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+            initialize.Headers.Accept.ParseAdd("application/json");
+            initialize.Headers.Accept.ParseAdd("text/event-stream");
+            initialize.Headers.TryAddWithoutValidation("MCP-Protocol-Version", "2025-06-18");
+            using var initializeResponse = await oauthClient.SendAsync(initialize);
+            initializeResponse.EnsureSuccessStatusCode();
+            Assert.True(initializeResponse.Headers.TryGetValues("Mcp-Session-Id", out var sessionValues));
+            var sessionId = Assert.Single(sessionValues!);
+
+            using var toolsList = new HttpRequestMessage(HttpMethod.Post, "/mcp")
+            {
+                Content = new StringContent("{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\",\"params\":{}}", Encoding.UTF8, "application/json")
+            };
+            toolsList.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+            toolsList.Headers.TryAddWithoutValidation("Mcp-Session-Id", sessionId);
+            toolsList.Headers.Accept.ParseAdd("application/json");
+            toolsList.Headers.Accept.ParseAdd("text/event-stream");
+            toolsList.Headers.TryAddWithoutValidation("MCP-Protocol-Version", "2025-06-18");
+            using var toolsListResponse = await oauthClient.SendAsync(toolsList);
+            toolsListResponse.EnsureSuccessStatusCode();
+            var toolsListBody = await toolsListResponse.Content.ReadAsStringAsync();
+            Assert.True(toolsListBody.Contains("GetTrip", StringComparison.Ordinal) || toolsListBody.Contains("get_trip", StringComparison.Ordinal));
+
+            using var refresh = await oauthClient.PostAsync("/connect/token", new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["grant_type"] = "refresh_token",
+                ["client_id"] = "detour-chatgpt",
+                ["refresh_token"] = refreshToken!,
+                ["resource"] = resource
+            }));
+            refresh.EnsureSuccessStatusCode();
+            var refreshedJson = JsonSerializer.Deserialize<JsonElement>(await refresh.Content.ReadAsStringAsync(), JsonOptions);
+            Assert.False(string.IsNullOrWhiteSpace(refreshedJson.GetProperty("access_token").GetString()));
+            var refreshedRefreshToken = refreshedJson.TryGetProperty("refresh_token", out var nextRefreshToken)
+                ? nextRefreshToken.GetString()
+                : refreshToken;
+
+            using var wrongResource = await oauthClient.PostAsync("/connect/token", new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["grant_type"] = "refresh_token",
+                ["client_id"] = "detour-chatgpt",
+                ["refresh_token"] = refreshedRefreshToken!,
+                ["resource"] = "https://other.example.test/mcp"
+            }));
+            Assert.Equal(HttpStatusCode.BadRequest, wrongResource.StatusCode);
+            Assert.Contains("invalid_target", await wrongResource.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("ConnectionStrings__tripdb", previousConnection);
+            Environment.SetEnvironmentVariable("Auth__PublicUrl", previousPublicUrl);
+            Environment.SetEnvironmentVariable("Auth__OAuth__ClientId", previousClientId);
+            Environment.SetEnvironmentVariable("Auth__OAuth__RedirectUris__0", previousRedirect);
+            Environment.SetEnvironmentVariable("Auth__Google__ClientId", previousGoogleClientId);
+            Environment.SetEnvironmentVariable("Auth__Google__ClientSecret", previousGoogleClientSecret);
+            Environment.SetEnvironmentVariable("Auth__AllowedEmails__0", previousAllowedEmail);
+            Environment.SetEnvironmentVariable("Auth__AllowLocalDev", previousLocalDev);
+        }
     }
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);

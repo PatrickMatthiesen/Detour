@@ -12,16 +12,17 @@ public sealed class OpenIddictInitializer(
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
         var scope = configuration["Auth:OAuth:Scope"] ?? "tripadvisor_api";
-        if (await scopes.FindByNameAsync(scope, cancellationToken) is null)
+        var existingScope = await scopes.FindByNameAsync(scope, cancellationToken);
+        var scopeDescriptor = new OpenIddictScopeDescriptor
         {
-            var scopeDescriptor = new OpenIddictScopeDescriptor
-            {
-                Name = scope,
-                DisplayName = "Detour data",
-            };
-            scopeDescriptor.Resources.Add(scope);
+            Name = scope,
+            DisplayName = "Detour data",
+        };
+        scopeDescriptor.Resources.Add(OAuthResource.GetIdentifier(configuration));
+        if (existingScope is null)
             await scopes.CreateAsync(scopeDescriptor, cancellationToken);
-        }
+        else
+            await scopes.UpdateAsync(existingScope, scopeDescriptor, cancellationToken);
 
         var clientId = configuration["Auth:OAuth:ClientId"];
         var redirects = configuration.GetSection("Auth:OAuth:RedirectUris").Get<string[]>() ?? [];
@@ -53,6 +54,7 @@ public sealed class OpenIddictInitializer(
             OpenIddictConstants.Permissions.GrantTypes.AuthorizationCode,
             OpenIddictConstants.Permissions.GrantTypes.RefreshToken,
             OpenIddictConstants.Permissions.ResponseTypes.Code,
+            OpenIddictConstants.Permissions.Prefixes.Resource + OAuthResource.GetIdentifier(configuration),
             OpenIddictConstants.Permissions.Prefixes.Scope + OpenIddictConstants.Scopes.OpenId,
             OpenIddictConstants.Permissions.Prefixes.Scope + OpenIddictConstants.Scopes.Profile,
             OpenIddictConstants.Permissions.Prefixes.Scope + OpenIddictConstants.Scopes.Email,
