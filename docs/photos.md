@@ -15,25 +15,7 @@ Image imports accept public HTTP(S) sources, validate redirects/DNS, limit downl
 
 `POST /api/places/{id}/photo/upload` accepts multipart `file`, `expectedVersion`, `sourceUrl`, `author`, `caption`, `kind`, and `license`. It uses the same processing/storage as remote imports. Browser cookie requests require the normal CSRF token; bearer requests use the existing trip API scope.
 
-For one-time migration, create a private JSON manifest outside source control:
-
-```json
-[
-  {
-    "placeId": "existing-place-id",
-    "file": "photos/example.jpg",
-    "sourceUrl": "https://example.org/photo-source",
-    "author": "Known photographer",
-    "caption": "Neighbourhood around the place",
-    "kind": "neighbourhood",
-    "license": "Known license, if any"
-  }
-]
-```
-
-Run `./scripts/import-place-photos.ps1 -ApiUrl <API URL> -ManifestPath <manifest>`. On production, supply an authorized bearer token through `DETOUR_PHOTO_IMPORT_TOKEN`; never put the token in the manifest or source code. Loopback development uses the existing local development authentication policy. The importer skips places with photos and stops on a conflict/error. It does not create or match places by name.
-
-The prototype photos were backed up locally before removal from the current source tree. Import those files with their original attribution, and retain that backup until the migration is verified. Existing Git history is unchanged.
+One-time migration tooling and backups stay outside source control. Existing Git history is unchanged.
 
 ## Persistence and deployment
 
