@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Detour.Api;
 
-public sealed class TripService(TripDbContext db, OwnerAccessor ownerAccessor, PhotoImportService? photoImports = null)
+public sealed class TripService(TripDbContext db, OwnerAccessor ownerAccessor, PhotoImportService? photoImports = null, GoogleMapsCoordinates? coordinates = null, GooglePlacesClient? placesClient = null)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -23,6 +23,7 @@ public sealed class TripService(TripDbContext db, OwnerAccessor ownerAccessor, P
             return snapshot;
         }
         var loaded = Read(row);
+        await EnrichLocationsAsync(loaded, owner, cancellationToken, refresh: true);
         await EnrichPhotosAsync(loaded, owner, cancellationToken);
         return loaded;
     }
@@ -32,7 +33,7 @@ public sealed class TripService(TripDbContext db, OwnerAccessor ownerAccessor, P
         if (expectedVersion < 0 || input.Trip is null || input.Trip.StartDate > input.Trip.EndDate) return new ReplaceResult.Invalid();
         var owner = ownerAccessor.OwnerId;
         try { ValidateAndNormalize(input); }
-        catch (ArgumentException) { return new ReplaceResult.Invalid(); }
+        catch (ArgumentException exception) { return new ReplaceResult.Invalid(exception.Message); }
         var before = await db.Trips.AsNoTracking().SingleOrDefaultAsync(x => x.OwnerId == owner, cancellationToken);
         if (before is null) return new ReplaceResult.Conflict(NewSnapshot());
         if (before.Version != expectedVersion)
@@ -41,6 +42,9 @@ public sealed class TripService(TripDbContext db, OwnerAccessor ownerAccessor, P
             await EnrichPhotosAsync(current, owner, cancellationToken);
             return new ReplaceResult.Conflict(current);
         }
+        Dictionary<string, GooglePlaceLocationRow> locations;
+        try { locations = await NormalizeCoordinatesAsync(input, Read(before), owner, cancellationToken); }
+        catch (ArgumentException exception) { return new ReplaceResult.Invalid(exception.Message); }
         var storedPhotos = await db.PlacePhotos.AsNoTracking().Where(x => x.OwnerId == owner).ToDictionaryAsync(x => x.PlaceId, cancellationToken);
         var staged = new Dictionary<string, PlacePhotoRow>();
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -79,6 +83,14 @@ public sealed class TripService(TripDbContext db, OwnerAccessor ownerAccessor, P
         row.Json = SerializeForPersistence(input);
         row.UpdatedAt = DateTimeOffset.UtcNow;
         var ids = input.Places.Select(x => x.Id).ToArray();
+        var existingLocations = await db.GooglePlaceLocations.Where(x => x.OwnerId == owner).ToArrayAsync(timeout.Token);
+        foreach (var existing in existingLocations)
+        {
+            if (!locations.Remove(existing.PlaceId, out var replacement)) db.GooglePlaceLocations.Remove(existing);
+            else if (replacement.MapsUrl != existing.MapsUrl || replacement.ExpiresAt > existing.ExpiresAt)
+                db.Entry(existing).CurrentValues.SetValues(replacement);
+        }
+        db.GooglePlaceLocations.AddRange(locations.Values);
         var changedPhotoIds = input.Places.Where(x => x.PhotoSpecified && x.Photo is null).Select(x => x.Id).Concat(staged.Keys).ToArray();
         var deletedPhotos = await db.PlacePhotos.Where(x => x.OwnerId == owner && (!ids.Contains(x.PlaceId) || changedPhotoIds.Contains(x.PlaceId))).ToArrayAsync(timeout.Token);
         foreach (var photo in deletedPhotos)
@@ -106,6 +118,7 @@ public sealed class TripService(TripDbContext db, OwnerAccessor ownerAccessor, P
             return new ReplaceResult.Conflict(current);
         }
         var saved = Read(row);
+        await EnrichLocationsAsync(saved, owner, timeout.Token);
         await EnrichPhotosAsync(saved, owner, timeout.Token);
         return new ReplaceResult.Success(saved);
     }
@@ -152,6 +165,10 @@ public sealed class TripService(TripDbContext db, OwnerAccessor ownerAccessor, P
     {
         var snapshot = JsonSerializer.Deserialize<TripSnapshot>(row.Json, JsonOptions) ?? NewSnapshot();
         snapshot.Version = row.Version;
+        foreach (var place in snapshot.Places)
+            if (!GoogleMapsCoordinates.IsValid(place.Latitude, place.Longitude)
+                && GoogleMapsCoordinates.Parse(place.GoogleMapsUrl) is { } point)
+                (place.Latitude, place.Longitude) = (point.Latitude, point.Longitude);
         return snapshot;
     }
 
@@ -167,6 +184,7 @@ public sealed class TripService(TripDbContext db, OwnerAccessor ownerAccessor, P
 
     private async Task EnrichPhotosAsync(TripSnapshot snapshot, string owner, CancellationToken cancellationToken)
     {
+        await EnrichLocationsAsync(snapshot, owner, cancellationToken);
         foreach (var place in snapshot.Places) place.Photo = null;
         if (snapshot.Places.Count == 0) return;
         var ids = snapshot.Places.Select(x => x.Id).ToArray();
@@ -189,8 +207,138 @@ public sealed class TripService(TripDbContext db, OwnerAccessor ownerAccessor, P
     {
         var node = JsonSerializer.SerializeToNode(snapshot, JsonOptions)!.AsObject();
         if (node["places"] is JsonArray places)
-            foreach (var place in places.OfType<JsonObject>()) place.Remove("photo");
+            foreach (var place in places.OfType<JsonObject>())
+            {
+                place.Remove("photo");
+                place.Remove("coordinatesFromGoogle");
+                place.Remove("resolveCoordinates");
+                if (snapshot.Places.Any(p => p.Id == place["id"]?.GetValue<string>() && p.CoordinatesFromGoogle))
+                {
+                    place.Remove("latitude");
+                    place.Remove("longitude");
+                }
+            }
         return node.ToJsonString(JsonOptions);
+    }
+
+    private async Task<Dictionary<string, GooglePlaceLocationRow>> NormalizeCoordinatesAsync(TripSnapshot input, TripSnapshot previous, string owner, CancellationToken ct)
+    {
+        var cached = await db.GooglePlaceLocations.AsNoTracking().Where(x => x.OwnerId == owner).ToDictionaryAsync(x => x.PlaceId, ct);
+        var retained = new Dictionary<string, GooglePlaceLocationRow>();
+        foreach (var old in previous.Places)
+            if (cached.TryGetValue(old.Id, out var stored) && stored.MapsUrl == old.GoogleMapsUrl)
+            {
+                old.CoordinatesFromGoogle = true;
+                old.Latitude = old.Longitude = null;
+                if (stored.ExpiresAt > DateTimeOffset.UtcNow)
+                    (old.Latitude, old.Longitude) = (stored.Latitude, stored.Longitude);
+            }
+        foreach (var place in input.Places)
+        {
+            var echoedGoogleCoordinates = place.CoordinatesFromGoogle;
+            var retryLocation = place.ResolveCoordinates && !GoogleMapsCoordinates.IsValid(place.Latitude, place.Longitude);
+            place.ResolveCoordinates = false;
+            place.CoordinatesFromGoogle = false;
+            var old = previous.Places.FirstOrDefault(p => p.Id == place.Id);
+            var urlChanged = old?.GoogleMapsUrl != place.GoogleMapsUrl;
+            if (urlChanged && echoedGoogleCoordinates && old?.CoordinatesFromGoogle == true)
+                place.Latitude = place.Longitude = null;
+            var coordinatesChanged = old?.Latitude != place.Latitude || old?.Longitude != place.Longitude;
+            if (old?.CoordinatesFromGoogle == true && !retryLocation && !urlChanged && (!coordinatesChanged || echoedGoogleCoordinates))
+            {
+                place.CoordinatesFromGoogle = true;
+                retained.Add(place.Id, cached[place.Id]);
+                (place.Latitude, place.Longitude) = (old.Latitude, old.Longitude);
+                continue;
+            }
+            var requiresLocation = retryLocation || old is null || urlChanged || coordinatesChanged
+                || old.Name != place.Name || old.City != place.City || old.Area != place.Area
+                || GoogleMapsCoordinates.IsValid(old.Latitude, old.Longitude);
+            // A new location URL must not silently retain coordinates from the previous URL.
+            var needsResolution = !GoogleMapsCoordinates.IsValid(place.Latitude, place.Longitude)
+                || urlChanged && !coordinatesChanged;
+            if (needsResolution)
+            {
+                var point = GoogleMapsCoordinates.Parse(place.GoogleMapsUrl);
+                if (point is null && requiresLocation && coordinates is not null)
+                    point = await coordinates.ResolveAsync(place.GoogleMapsUrl, ct);
+                if (point is { } resolved)
+                {
+                    if (retryLocation && !urlChanged && old?.CoordinatesFromGoogle == true
+                        && resolved.GooglePlaceId != cached[place.Id].GooglePlaceId)
+                        throw new ArgumentException($"The Google Maps search for '{place.Name}' now matches a different place. Check its Maps URL or provide verified coordinates.");
+                    (place.Latitude, place.Longitude) = (resolved.Latitude, resolved.Longitude);
+                    if (resolved.GooglePlaceId is { } googleId && resolved.Query is { } query)
+                    {
+                        place.CoordinatesFromGoogle = true;
+                        retained.Add(place.Id, new GooglePlaceLocationRow
+                        {
+                            OwnerId = owner, PlaceId = place.Id, MapsUrl = place.GoogleMapsUrl!, Query = query,
+                            GooglePlaceId = googleId, Latitude = resolved.Latitude, Longitude = resolved.Longitude,
+                            ExpiresAt = DateTimeOffset.UtcNow.AddDays(29)
+                        });
+                    }
+                }
+                else if (urlChanged && !coordinatesChanged && !string.IsNullOrWhiteSpace(place.GoogleMapsUrl))
+                    throw new ArgumentException($"Place '{place.Name}' needs verified latitude and longitude for the new Google Maps URL. The link did not resolve a place location.");
+            }
+            if (requiresLocation && !GoogleMapsCoordinates.IsValid(place.Latitude, place.Longitude))
+                throw new ArgumentException($"Place '{place.Name}' requires latitude and longitude, or a Google Maps link that resolves to one place. Text searches need the server's Google Places API key. Map-view links need separately verified coordinates. Do not guess.");
+        }
+        return retained;
+    }
+
+    private async Task EnrichLocationsAsync(TripSnapshot snapshot, string owner, CancellationToken ct, bool refresh = false)
+    {
+        var cached = await db.GooglePlaceLocations.AsNoTracking().Where(x => x.OwnerId == owner).ToArrayAsync(ct);
+        foreach (var row in cached)
+        {
+            var place = snapshot.Places.FirstOrDefault(p => p.Id == row.PlaceId && p.GoogleMapsUrl == row.MapsUrl);
+            if (place is null) continue;
+            place.CoordinatesFromGoogle = true;
+            place.Latitude = place.Longitude = null;
+            if (row.ExpiresAt <= DateTimeOffset.UtcNow && row.RefreshAfter <= DateTimeOffset.UtcNow && refresh && placesClient is not null)
+            {
+                // Reserve one refresh attempt. Failures and concurrent reads cannot hammer the paid API.
+                row.Latitude = row.Longitude = null;
+                row.RefreshAfter = DateTimeOffset.UtcNow.AddMinutes(15);
+                if (!await UpdateCachedLocationAsync(row, ct)) continue;
+                // Refresh only the same Google place. A changed search result needs user review.
+                try
+                {
+                    var resolved = await placesClient.SearchAsync(row.Query, ct);
+                    if (resolved.GooglePlaceId == row.GooglePlaceId)
+                    {
+                        row.Latitude = resolved.Latitude;
+                        row.Longitude = resolved.Longitude;
+                        row.ExpiresAt = DateTimeOffset.UtcNow.AddDays(29);
+                        if (!await UpdateCachedLocationAsync(row, ct)) continue;
+                    }
+                }
+                catch (ArgumentException) { /* Keep the trip readable during lookup failures. */ }
+            }
+            if (row.ExpiresAt > DateTimeOffset.UtcNow)
+                (place.Latitude, place.Longitude) = (row.Latitude, row.Longitude);
+        }
+    }
+
+    private async Task<bool> UpdateCachedLocationAsync(GooglePlaceLocationRow row, CancellationToken ct)
+    {
+        var originalRevision = row.Revision;
+        row.Revision = Guid.NewGuid();
+        if (db.Database.IsRelational())
+            return await db.GooglePlaceLocations.Where(x => x.OwnerId == row.OwnerId && x.PlaceId == row.PlaceId && x.Revision == originalRevision)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.Latitude, row.Latitude)
+                    .SetProperty(x => x.Longitude, row.Longitude).SetProperty(x => x.ExpiresAt, row.ExpiresAt)
+                    .SetProperty(x => x.RefreshAfter, row.RefreshAfter).SetProperty(x => x.Revision, row.Revision), ct) == 1;
+        var tracked = db.GooglePlaceLocations.Local.FirstOrDefault(x => x.OwnerId == row.OwnerId && x.PlaceId == row.PlaceId);
+        if (tracked is not null) db.Entry(tracked).State = EntityState.Detached;
+        var entry = db.Attach(row);
+        entry.State = EntityState.Modified;
+        entry.Property(x => x.Revision).OriginalValue = originalRevision;
+        try { await db.SaveChangesAsync(ct); return true; }
+        catch (DbUpdateConcurrencyException) { return false; }
+        finally { entry.State = EntityState.Detached; }
     }
 
     private static TripSnapshot NewSnapshot() => new() { Version = 1, Trip = new() };
@@ -205,6 +353,8 @@ public sealed class TripService(TripDbContext db, OwnerAccessor ownerAccessor, P
         foreach (var place in snapshot.Places)
         {
             if (string.IsNullOrWhiteSpace(place.Id) || string.IsNullOrWhiteSpace(place.Name) || string.IsNullOrWhiteSpace(place.City)) throw new ArgumentException("Place id, name, and city are required.");
+            place.GoogleMapsUrl = GoogleMapsCoordinates.NormalizeUrl(place.GoogleMapsUrl);
+            if (place.Id.Length > 200 || place.GoogleMapsUrl?.Length > 2048) throw new ArgumentException("Place ID or Google Maps URL is too long.");
             ValidateUrl(place.SourceUrl, "place source URL"); ValidateUrl(place.GoogleMapsUrl, "Google Maps URL");
             if (place.Latitude is < -90 or > 90 || place.Longitude is < -180 or > 180) throw new ArgumentException("Place coordinates are invalid.");
             if (place.DurationMinutes is <= 0) throw new ArgumentException("Place duration must be positive.");

@@ -30,6 +30,8 @@ export interface Place {
   status?: string | null;
   latitude?: number | null;
   longitude?: number | null;
+  coordinatesFromGoogle?: boolean;
+  resolveCoordinates?: boolean;
   selected?: boolean;
   photo?: PlacePhotoMetadata | null;
 }

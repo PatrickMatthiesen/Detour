@@ -111,6 +111,7 @@ jobs:
           Parameters__garage_secret_access_key: ${{ secrets.GARAGE_SECRET_ACCESS_KEY }}
           Parameters__GoogleClientId: ${{ secrets.GOOGLE_CLIENT_ID }}
           Parameters__GoogleClientSecret: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          Parameters__GoogleMapsApiKey: ${{ secrets.GOOGLE_MAPS_API_KEY }}
           Parameters__OwnerEmail: ${{ secrets.OWNER_EMAIL }}
           Parameters__ChatGptClientId: ${{ vars.CHATGPT_CLIENT_ID }}
           Parameters__ChatGptRedirectUri: ${{ vars.CHATGPT_REDIRECT_URI }}

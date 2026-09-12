@@ -30,7 +30,7 @@ public sealed class TripServiceTests
         var service = CreateService(db);
         var initial = await service.GetSnapshotAsync();
         var staleVersion = initial.Version;
-        initial.Places.Add(new Place { Name = "Senso-ji", City = "Tokyo", SourceUrl = "https://example.test/senso" });
+        initial.Places.Add(new Place { Name = "Senso-ji", City = "Tokyo", Latitude = 35.68, Longitude = 139.7, SourceUrl = "https://example.test/senso" });
         var saved = await service.ReplaceAsync(initial, initial.Version);
         var success = Assert.IsType<ReplaceResult.Success>(saved);
 
@@ -62,11 +62,11 @@ public sealed class TripServiceTests
         await using var db = CreateDb();
         var service = CreateService(db);
         var initial = await service.GetSnapshotAsync();
-        var original = new Place { Name = "Old", City = "Tokyo", SourceUrl = "https://example.test/place" };
+        var original = new Place { Name = "Old", City = "Tokyo", Latitude = 35.68, Longitude = 139.7, SourceUrl = "https://example.test/place" };
         initial.Places.Add(original);
         await service.ReplaceAsync(initial, initial.Version);
 
-        var updated = await service.SavePlaceAsync(new Place { Id = original.Id, Name = "New", City = "Tokyo", SourceUrl = "https://example.test/place", Description = "updated" }, 2);
+        var updated = await service.SavePlaceAsync(new Place { Id = original.Id, Name = "New", City = "Tokyo", Latitude = 35.68, Longitude = 139.7, SourceUrl = "https://example.test/place", Description = "updated" }, 2);
 
         Assert.IsType<ReplaceResult.Success>(updated);
         var current = await service.GetSnapshotAsync();
@@ -74,7 +74,7 @@ public sealed class TripServiceTests
         Assert.Equal("New", place.Name);
         Assert.Equal("updated", place.Description);
 
-        var second = await service.SavePlaceAsync(new Place { Name = "Another", City = "Tokyo", SourceUrl = "https://example.test/place" }, current.Version);
+        var second = await service.SavePlaceAsync(new Place { Name = "Another", City = "Tokyo", Latitude = 35.68, Longitude = 139.7, SourceUrl = "https://example.test/place" }, current.Version);
         Assert.IsType<ReplaceResult.Success>(second);
         Assert.Equal(2, (await service.GetSnapshotAsync()).Places.Count);
     }

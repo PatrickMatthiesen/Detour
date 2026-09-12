@@ -87,7 +87,7 @@ public sealed class PostgresIntegrationTests : IAsyncLifetime
                     Raw = "synthetic arrival"
                 }
             },
-            Places = [new Place { Id = "seed-place", Name = "Synthetic Place", City = "Tokyo", SourceUrl = "https://example.test/place" }],
+            Places = [new Place { Id = "seed-place", Name = "Synthetic Place", City = "Tokyo", Latitude = 35.68, Longitude = 139.7, SourceUrl = "https://example.test/place" }],
             Stays = [new Stay { Id = "seed-stay", Name = "Synthetic Stay", City = "Tokyo", CheckIn = new DateOnly(2026, 9, 30), CheckOut = new DateOnly(2026, 10, 1) }],
             TravelLegs = [new TravelLeg { Id = "seed-leg", From = "Tokyo", To = "Kyoto", Date = new DateOnly(2026, 10, 1), Mode = "train", Estimated = false }],
             Activities = [new Activity { Id = "seed-activity", Title = "Synthetic Activity", Date = new DateOnly(2026, 10, 1) }],
@@ -142,8 +142,8 @@ public sealed class PostgresIntegrationTests : IAsyncLifetime
         await using var db2 = CreateDb();
         var service1 = CreateService(db1, "race-owner");
         var service2 = CreateService(db2, "race-owner");
-        var left = Clone(initial); left.Places.Add(new Place { Id = "race-left", Name = "Left", City = "Tokyo" });
-        var right = Clone(initial); right.Places.Add(new Place { Id = "race-right", Name = "Right", City = "Tokyo" });
+        var left = Clone(initial); left.Places.Add(new Place { Id = "race-left", Name = "Left", City = "Tokyo", Latitude = 35.68, Longitude = 139.7 });
+        var right = Clone(initial); right.Places.Add(new Place { Id = "race-right", Name = "Right", City = "Tokyo", Latitude = 35.68, Longitude = 139.7 });
 
         await service1.GetSnapshotAsync();
         await service2.GetSnapshotAsync();
@@ -172,7 +172,7 @@ public sealed class PostgresIntegrationTests : IAsyncLifetime
         var a = CreateService(dbA, "owner-a");
         var b = CreateService(dbB, "owner-b");
         var snapshot = await a.GetSnapshotAsync();
-        snapshot.Places.Add(new Place { Id = "private-a", Name = "Private", City = "Tokyo" });
+        snapshot.Places.Add(new Place { Id = "private-a", Name = "Private", City = "Tokyo", Latitude = 35.68, Longitude = 139.7 });
         await a.ReplaceAsync(snapshot, snapshot.Version);
 
         Assert.Single((await a.GetSnapshotAsync()).Places);
@@ -189,11 +189,11 @@ public sealed class PostgresIntegrationTests : IAsyncLifetime
         var initial = await tools.GetTrip();
         Assert.Equal(1, initial.Version);
         var second = await tools.EditPlace(EditOperation.create, "mcp-place", 1,
-            new PlaceChanges { Name = "MCP Place", City = "Tokyo", SourceUrl = "https://example.test/reel" });
+            new PlaceChanges { Name = "MCP Place", City = "Tokyo", Latitude = 35.68, Longitude = 139.7, SourceUrl = "https://example.test/reel" });
         Assert.True(second.Success);
         Assert.Equal(2, second.Version);
         Assert.True((await tools.EditPlace(EditOperation.create, "mcp-place-2", 2,
-            new PlaceChanges { Name = "Second Reel Place", City = "Tokyo", SourceUrl = "https://example.test/reel" })).Success);
+            new PlaceChanges { Name = "Second Reel Place", City = "Tokyo", Latitude = 35.68, Longitude = 139.7, SourceUrl = "https://example.test/reel" })).Success);
         Assert.True((await tools.EditBooking(EditOperation.create, "mcp-booking", 3,
             new BookingChanges { Kind = "hotel", Title = "MCP Hotel", Status = "confirmed", CheckIn = new(2026, 10, 1), CheckOut = new(2026, 10, 3) })).Success);
         var final = await service.GetSnapshotAsync();
@@ -519,7 +519,7 @@ public sealed class PostgresIntegrationTests : IAsyncLifetime
             using var read = await client.GetAsync("/api/trip");
             read.EnsureSuccessStatusCode();
             var snapshot = JsonSerializer.Deserialize<TripSnapshot>(await read.Content.ReadAsStringAsync(), JsonOptions)!;
-            snapshot.Places.Add(new Place { Id = "http-photo-place", Name = "HTTP photo place", City = "Tokyo" });
+            snapshot.Places.Add(new Place { Id = "http-photo-place", Name = "HTTP photo place", City = "Tokyo", Latitude = 35.68, Longitude = 139.7 });
             var csrf = JsonSerializer.Deserialize<JsonElement>(await (await client.GetAsync("/auth/csrf")).Content.ReadAsStringAsync(), JsonOptions).GetProperty("token").GetString();
             using var replace = new HttpRequestMessage(HttpMethod.Put, "/api/trip") { Content = JsonContent.Create(snapshot) };
             replace.Headers.TryAddWithoutValidation("X-CSRF-TOKEN", csrf);
@@ -576,7 +576,7 @@ public sealed class PostgresIntegrationTests : IAsyncLifetime
         await using var setup = CreateDb();
         var seed = CreateService(setup, "photo-race-owner");
         var initial = await seed.GetSnapshotAsync();
-        initial.Places.Add(new Place { Id = "photo-race-place", Name = "Photo race", City = "Tokyo" });
+        initial.Places.Add(new Place { Id = "photo-race-place", Name = "Photo race", City = "Tokyo", Latitude = 35.68, Longitude = 139.7 });
         var saved = Assert.IsType<ReplaceResult.Success>(await seed.ReplaceAsync(initial, initial.Version));
         var store = new HttpPhotoStore();
         await using var db1 = CreateDb();
@@ -660,12 +660,79 @@ public sealed class PostgresIntegrationTests : IAsyncLifetime
 
     private TripDbContext CreateDb() => new(new DbContextOptionsBuilder<TripDbContext>().UseNpgsql(connection!).Options);
 
-    private static TripService CreateService(TripDbContext db, string owner)
+    [Fact]
+    public async Task Google_coordinates_expire_refresh_and_stay_out_of_the_trip_document_in_postgres()
+    {
+        if (!HasDatabase()) return;
+        using var handler = new PlacesBackchannelHandler();
+        using var http = new HttpClient(handler);
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["GoogleMaps:ApiKey"] = "test-key" }).Build();
+        var placesClient = new GooglePlacesClient(http, configuration);
+        await using var db = CreateDb();
+        var service = CreateService(db, "maps-owner", placesClient);
+        var snapshot = await service.GetSnapshotAsync();
+        snapshot.Places.Add(new Place
+        {
+            Id = "nakiryu", Name = "Nakiryu", City = "Tokyo",
+            GoogleMapsUrl = "google.com/maps/search/?api=1&query=Nakiryu%20Minamiotsuka%20Japan"
+        });
+        var saved = Assert.IsType<ReplaceResult.Success>(await service.ReplaceAsync(snapshot, snapshot.Version));
+        Assert.Equal(35.7286762, Assert.Single(saved.Snapshot.Places).Latitude);
+        Assert.Single(handler.Queries);
+        var stored = await db.GooglePlaceLocations.SingleAsync();
+        stored.ExpiresAt = DateTimeOffset.UtcNow.AddDays(-1);
+        await db.SaveChangesAsync();
+        await GoogleLocationCleanupWorker.PruneAsync(db);
+        db.ChangeTracker.Clear();
+        Assert.Null((await db.GooglePlaceLocations.SingleAsync()).Latitude);
+        Assert.DoesNotContain("35.7286762", (await db.Trips.SingleAsync()).Json);
+
+        await using var readerDb = CreateDb();
+        var reader = CreateService(readerDb, "maps-owner", placesClient);
+        var refreshed = await reader.GetSnapshotAsync();
+        Assert.Equal(35.7286762, Assert.Single(refreshed.Places).Latitude);
+        Assert.Equal(2, handler.Queries.Count);
+        Assert.Equal(saved.Snapshot.Version, refreshed.Version);
+        var edited = Clone(refreshed);
+        edited.Tasks.Add(new TripTask { Id = "check", Title = "Check hours" });
+        Assert.IsType<ReplaceResult.Success>(await reader.ReplaceAsync(edited, edited.Version));
+        readerDb.ChangeTracker.Clear();
+        Assert.DoesNotContain("35.7286762", (await readerDb.Trips.SingleAsync()).Json);
+        Assert.True((await readerDb.GooglePlaceLocations.SingleAsync()).ExpiresAt > DateTimeOffset.UtcNow.AddDays(28));
+
+        var cached = await readerDb.GooglePlaceLocations.SingleAsync();
+        cached.ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(-1);
+        cached.RefreshAfter = DateTimeOffset.MinValue;
+        await readerDb.SaveChangesAsync();
+        handler.Fail = true;
+        Assert.Null(Assert.Single((await reader.GetSnapshotAsync()).Places).Latitude);
+        Assert.Null(Assert.Single((await reader.GetSnapshotAsync()).Places).Latitude);
+        Assert.Equal(3, handler.Queries.Count);
+    }
+
+    private sealed class PlacesBackchannelHandler : HttpMessageHandler
+    {
+        public List<string> Queries { get; } = [];
+        public bool Fail { get; set; }
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            Assert.Equal("https://places.googleapis.com/v1/places:searchText", request.RequestUri!.AbsoluteUri);
+            using var json = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(ct));
+            Queries.Add(json.RootElement.GetProperty("textQuery").GetString()!);
+            return new HttpResponseMessage(Fail ? HttpStatusCode.TooManyRequests : HttpStatusCode.OK)
+            {
+                Content = new StringContent("""{"places":[{"id":"nakiryu-google-id","location":{"latitude":35.7286762,"longitude":139.7303427}}]}""", Encoding.UTF8, "application/json")
+            };
+        }
+    }
+
+    private static TripService CreateService(TripDbContext db, string owner, GooglePlacesClient? places = null)
     {
         var context = new DefaultHttpContext { Connection = { RemoteIpAddress = IPAddress.Loopback } };
         context.Request.Host = new HostString("localhost");
         context.User = new ClaimsPrincipal(new ClaimsIdentity([new Claim("sub", owner)], "test"));
-        return new TripService(db, new OwnerAccessor(new FixedHttpContextAccessor(context), new ConfigurationBuilder().AddInMemoryCollection().Build()));
+        return new TripService(db, new OwnerAccessor(new FixedHttpContextAccessor(context), new ConfigurationBuilder().AddInMemoryCollection().Build()),
+            coordinates: places is null ? null : new GoogleMapsCoordinates(new HttpClient(), places), placesClient: places);
     }
 
     private static TripSnapshot Clone(TripSnapshot snapshot) => JsonSerializer.Deserialize<TripSnapshot>(JsonSerializer.Serialize(snapshot, JsonOptions), JsonOptions)!;
@@ -721,6 +788,12 @@ public sealed class PostgresIntegrationTests : IAsyncLifetime
                         options.UserInformationEndpoint = "https://oauth2.google.test/userinfo";
                         options.Backchannel = new HttpClient(new GoogleBackchannelHandler("owner@example.test", true));
                     }));
+                builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["GoogleMaps:ApiKey"] = "test-maps-key"
+                }));
+                builder.ConfigureTestServices(services => services.AddHttpClient<GooglePlacesClient>()
+                    .ConfigurePrimaryHttpMessageHandler(() => new PlacesBackchannelHandler()));
             });
             using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
             {
@@ -791,6 +864,38 @@ public sealed class PostgresIntegrationTests : IAsyncLifetime
             api.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
             using var apiResponse = await oauthClient.SendAsync(api);
             apiResponse.EnsureSuccessStatusCode();
+            var trip = JsonSerializer.Deserialize<TripSnapshot>(await apiResponse.Content.ReadAsStringAsync(), JsonOptions)!;
+            var originalVersion = trip.Version;
+            var csrf = JsonSerializer.Deserialize<JsonElement>(await (await client.GetAsync("/auth/csrf")).Content.ReadAsStringAsync(), JsonOptions).GetProperty("token").GetString();
+            trip.Places.Add(new Place { Id = "http-location", Name = "Location test", City = "Tokyo" });
+            using var missingLocation = new HttpRequestMessage(HttpMethod.Put, "/api/trip")
+            {
+                Content = new StringContent(JsonSerializer.Serialize(trip, JsonOptions), Encoding.UTF8, "application/json")
+            };
+            missingLocation.Headers.TryAddWithoutValidation("X-CSRF-TOKEN", csrf);
+            using var missingResponse = await client.SendAsync(missingLocation);
+            Assert.Equal(HttpStatusCode.BadRequest, missingResponse.StatusCode);
+            Assert.Contains("requires latitude", await missingResponse.Content.ReadAsStringAsync());
+
+            trip.Places[^1].GoogleMapsUrl = "https://www.google.com/maps/search/?api=1&query=35.68%2C139.7";
+            trip.Places.Add(new Place
+            {
+                Id = "http-google-search", Name = "Nakiryu", City = "Tokyo",
+                GoogleMapsUrl = "https://www.google.com/maps/search/?api=1&query=Nakiryu%20Minamiotsuka%20Japan"
+            });
+            using var located = new HttpRequestMessage(HttpMethod.Put, "/api/trip")
+            {
+                Content = new StringContent(JsonSerializer.Serialize(trip, JsonOptions), Encoding.UTF8, "application/json")
+            };
+            located.Headers.TryAddWithoutValidation("X-CSRF-TOKEN", csrf);
+            using var locatedResponse = await client.SendAsync(located);
+            locatedResponse.EnsureSuccessStatusCode();
+            var locatedTrip = JsonSerializer.Deserialize<TripSnapshot>(await locatedResponse.Content.ReadAsStringAsync(), JsonOptions)!;
+            Assert.Equal(originalVersion + 1, locatedTrip.Version);
+            Assert.Equal(35.68, locatedTrip.Places.Single(p => p.Id == "http-location").Latitude);
+            Assert.Equal(139.7, locatedTrip.Places.Single(p => p.Id == "http-location").Longitude);
+            Assert.Equal(35.7286762, locatedTrip.Places.Single(p => p.Id == "http-google-search").Latitude);
+            Assert.True(locatedTrip.Places.Single(p => p.Id == "http-google-search").CoordinatesFromGoogle);
 
             using var initialize = new HttpRequestMessage(HttpMethod.Post, "/mcp")
             {
@@ -818,6 +923,9 @@ public sealed class PostgresIntegrationTests : IAsyncLifetime
             toolsListResponse.EnsureSuccessStatusCode();
             var toolsListBody = await toolsListResponse.Content.ReadAsStringAsync();
             Assert.True(toolsListBody.Contains("GetTrip", StringComparison.Ordinal) || toolsListBody.Contains("get_trip", StringComparison.Ordinal));
+            Assert.Contains("map location", toolsListBody);
+            Assert.Contains("Google Places Text Search", toolsListBody);
+            Assert.Contains("changes.photo imports", toolsListBody);
 
             using var refresh = await oauthClient.PostAsync("/connect/token", new FormUrlEncodedContent(new Dictionary<string, string>
             {

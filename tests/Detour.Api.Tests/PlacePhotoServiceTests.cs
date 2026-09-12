@@ -18,7 +18,7 @@ public sealed class PlacePhotoServiceTests
         var store = new FakePhotoStore();
         var photos = CreatePhotoService(db, trips, "owner-a", store);
         var snapshot = await trips.GetSnapshotAsync();
-        snapshot.Places.Add(new Place { Id = "place-a", Name = "Ginza", City = "Tokyo" });
+        snapshot.Places.Add(new Place { Id = "place-a", Name = "Ginza", City = "Tokyo", Latitude = 35.68, Longitude = 139.7 });
         var saved = Assert.IsType<ReplaceResult.Success>(await trips.ReplaceAsync(snapshot, snapshot.Version));
 
         await using var input = new MemoryStream(Convert.FromBase64String(TinyPng));
@@ -51,7 +51,7 @@ public sealed class PlacePhotoServiceTests
         var store = new FakePhotoStore();
         var photosA = CreatePhotoService(db, ownerA, "owner-a", store);
         var initial = await ownerA.GetSnapshotAsync();
-        initial.Places.Add(new Place { Id = "place-a", Name = "Ginza", City = "Tokyo" });
+        initial.Places.Add(new Place { Id = "place-a", Name = "Ginza", City = "Tokyo", Latitude = 35.68, Longitude = 139.7 });
         var saved = Assert.IsType<ReplaceResult.Success>(await ownerA.ReplaceAsync(initial, initial.Version));
         await using var input = new MemoryStream(Convert.FromBase64String(TinyPng));
         var imported = await photosA.ImportUploadedAsync("place-a", input, null, null, null, null, null, saved.Snapshot.Version, CancellationToken.None);
@@ -72,7 +72,7 @@ public sealed class PlacePhotoServiceTests
         var store = new FakePhotoStore();
         var photos = CreatePhotoService(db, trips, "owner-a", store);
         var initial = await trips.GetSnapshotAsync();
-        initial.Places.Add(new Place { Id = "place-a", Name = "Ginza", City = "Tokyo" });
+        initial.Places.Add(new Place { Id = "place-a", Name = "Ginza", City = "Tokyo", Latitude = 35.68, Longitude = 139.7 });
         var placeVersion = Assert.IsType<ReplaceResult.Success>(await trips.ReplaceAsync(initial, initial.Version)).Snapshot.Version;
 
         await using var input = new MemoryStream(Convert.FromBase64String(TinyPng));
@@ -87,7 +87,7 @@ public sealed class PlacePhotoServiceTests
         Assert.Contains(db.PhotoObjectDeletions, x => x.ObjectKey == objectKey);
 
         var recreated = await trips.GetSnapshotAsync();
-        recreated.Places.Add(new Place { Id = "place-a", Name = "Ginza rebuilt", City = "Tokyo" });
+        recreated.Places.Add(new Place { Id = "place-a", Name = "Ginza rebuilt", City = "Tokyo", Latitude = 35.68, Longitude = 139.7 });
         var rebuilt = Assert.IsType<ReplaceResult.Success>(await trips.ReplaceAsync(recreated, recreated.Version)).Snapshot;
         Assert.Null(Assert.Single(rebuilt.Places).Photo);
 
@@ -104,7 +104,7 @@ public sealed class PlacePhotoServiceTests
         var store = new FakePhotoStore();
         var photos = CreatePhotoService(db, trips, "owner-a", store);
         var initial = await trips.GetSnapshotAsync();
-        initial.Places.Add(new Place { Id = "place-a", Name = "Ginza", City = "Tokyo" });
+        initial.Places.Add(new Place { Id = "place-a", Name = "Ginza", City = "Tokyo", Latitude = 35.68, Longitude = 139.7 });
         var placeVersion = Assert.IsType<ReplaceResult.Success>(await trips.ReplaceAsync(initial, initial.Version)).Snapshot.Version;
 
         await using var input = new MemoryStream(Convert.FromBase64String(TinyPng));

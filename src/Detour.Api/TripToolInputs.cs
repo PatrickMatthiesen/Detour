@@ -18,8 +18,11 @@ public sealed class PlaceChanges
     public string? Notes { get; set; }
     [Description("Original source provenance. Preserve unless explicitly correcting it.")]
     public string? SourceUrl { get; set; }
+    [Description("Place links and short links resolve coordinates automatically. Name-only maps/search URLs use Google Places Text Search when configured and must match one place. Map viewport centers are ignored. Otherwise provide verified latitude and longitude.")]
     public string? GoogleMapsUrl { get; set; }
+    [Description("Required as a pair unless the Google Maps URL resolves place coordinates. Never guess.")]
     public double? Latitude { get; set; }
+    [Description("Required as a pair unless the Google Maps URL resolves place coordinates. Never guess.")]
     public double? Longitude { get; set; }
     public int? DurationMinutes { get; set; }
     public string? Priority { get; set; }
