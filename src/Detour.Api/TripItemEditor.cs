@@ -106,7 +106,8 @@ public sealed class TripItemEditor(TripService service)
         var result = await service.ReplaceAsync(snapshot, expectedVersion, cancellationToken);
         return result switch
         {
-            ReplaceResult.Success success => new ItemEditResult(true, success.Snapshot.Version, null, null, collectionItem),
+            ReplaceResult.Success success => new ItemEditResult(true, success.Snapshot.Version, null, null, FindItem(success.Snapshot, itemType, id) ?? collectionItem),
+            ReplaceResult.PhotoFailed failed => Failure(expectedVersion, "photo_import_failed", failed.Message),
             ReplaceResult.Conflict conflict => Failure(
                 conflict.Snapshot.Version,
                 "version_conflict",
@@ -122,7 +123,7 @@ public sealed class TripItemEditor(TripService service)
         try
         {
             var properties = typeof(T).GetProperties(BindingFlags.Instance | BindingFlags.Public)
-                .Where(property => property.CanRead && property.CanWrite)
+                .Where(property => property.CanRead && property.SetMethod?.IsPublic == true && property.GetCustomAttribute<JsonIgnoreAttribute>() is null)
                 .ToDictionary(GetJsonName, StringComparer.Ordinal);
             var json = JsonSerializer.SerializeToNode(source, typeof(T), JsonOptions)?.AsObject() ?? new JsonObject();
 

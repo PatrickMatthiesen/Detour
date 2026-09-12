@@ -19,7 +19,7 @@ aspire start --non-interactive
 aspire describe --format Json --non-interactive
 ```
 
-Aspire starts PostgreSQL with a persistent data volume (`postgres`) and the `tripdb` database, then starts the API and Vite web app. If present, the first development run seeds `data/japan-2026.seed.json`. Personal trip data and source exports are kept out of Git. Add places manually or through MCP, or use `scripts/prepare-japan-seed.py` with your own exports to prepare a local seed.
+Aspire starts PostgreSQL, Garage object storage and a one-shot bucket provisioner before the API and Vite web app. Both databases and photos use persistent volumes. If present, the first development run seeds `data/japan-2026.seed.json`. Personal trip data and source exports are kept out of Git. Add places manually or through MCP, or use `scripts/prepare-japan-seed.py` with your own exports to prepare a local seed.
 
 The dashboard URL, including its login token, is printed by `aspire start`. Use the web endpoint shown in the dashboard for the planner. Stop the graph when finished:
 
@@ -49,7 +49,7 @@ To configure the plugin in ChatGPT:
 4. Select default scopes `openid`, `email`, `offline_access`, `profile`, and `tripadvisor_api`.
 5. Copy the displayed **Callback URL** (currently `https://chatgpt.com/connector_platform_oauth_redirect`) into Detour's `Auth__OAuth__RedirectUris__0` configuration. The server's `Auth__OAuth__ClientId` must match `detour-chatgpt`.
 6. Accept the custom MCP server warning, click **Create**, and complete Google sign-in with an allowed owner account.
-7. In **Settings → Plugins → Detour**, confirm the connection is present. If Actions is empty, click **Refresh**; the catalog should include `get_trip`, `search_places`, and seven edit actions.
+7. In **Settings → Plugins → Detour**, confirm the connection is present. If Actions is empty, click **Refresh**; the catalog should include `get_trip`, `search_places`, and seven trip edit actions. Place photo import and removal are part of `edit_place`.
 8. Start a new chat, type `@Detour`, select this plugin, and ask it to read the trip overview. If it is missing from the picker, reload ChatGPT. If an older development plugin is also installed, select the new Detour connection.
 
 The resource is the complete `/mcp` URL; `tripadvisor_api` is the permission scope. See [authentication](docs/authentication.md) for deployment credentials, OAuth discovery, and troubleshooting.
@@ -78,4 +78,8 @@ Map markers for cities are explicitly approximate. Places without resolved coord
 
 The working app opens at `/` (Places), `/plan` (daily planning and whole-trip calendar), and `/preparation` (checklist and packing). Plan includes city-route, journey and booking editors, compact place details and a full-size photo viewer. Prepare supports task due dates and in-app reminders, plus category- and bag-filtered packing. The approved design preview remains at `/4`; numbered routes are experiments.
 
-Photo sources, authors and licenses are listed in [photo credits](web/public/design-photos/ATTRIBUTION.md).
+Place photos live in a private Garage bucket, not in this repository or the frontend deployment. Each place can have one photo with its source, author, caption and license. The API authenticates photo requests; it does not expose Garage credentials or public object URLs. Neighbourhood and illustrative photos are labelled, and unavailable photos show a placeholder.
+
+The [Garage integration](https://www.nuget.org/packages/Subjective.Aspire.Hosting.Garage/) restores from NuGet.org through the normal Aspire build. The provisioner image is pinned by digest.
+
+See [photo imports and migration](docs/photos.md) for agent tools and importing existing pictures.

@@ -105,6 +105,10 @@ jobs:
         env:
           ASPIRE_CONTAINER_RUNTIME: docker
           Parameters__postgres_password: ${{ secrets.POSTGRES_PASSWORD }}
+          Parameters__garage_rpc_secret: ${{ secrets.GARAGE_RPC_SECRET }}
+          Parameters__garage_admin_token: ${{ secrets.GARAGE_ADMIN_TOKEN }}
+          Parameters__garage_access_key_id: ${{ secrets.GARAGE_ACCESS_KEY_ID }}
+          Parameters__garage_secret_access_key: ${{ secrets.GARAGE_SECRET_ACCESS_KEY }}
           Parameters__GoogleClientId: ${{ secrets.GOOGLE_CLIENT_ID }}
           Parameters__GoogleClientSecret: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           Parameters__OwnerEmail: ${{ secrets.OWNER_EMAIL }}
@@ -113,6 +117,9 @@ jobs:
           Detour__PublicUrl: ${{ vars.PUBLIC_URL || 'https://detour.patrickbm.com' }}
           Detour__KeysDirectory: ${{ vars.AUTH_KEYS_DIR || '/srv/detour/keys' }}
         run: |
+          for parameter in Parameters__garage_rpc_secret Parameters__garage_admin_token Parameters__garage_access_key_id Parameters__garage_secret_access_key; do
+            [[ -n "${!parameter}" ]] || { echo "Missing persistent Garage secret: $parameter"; exit 1; }
+          done
           docker context create "$DOCKER_CONTEXT_NAME" --docker "host=ssh://$DEPLOY_USER@$DEPLOY_HOST"
           docker context use "$DOCKER_CONTEXT_NAME"
           aspire deploy --environment Production --non-interactive

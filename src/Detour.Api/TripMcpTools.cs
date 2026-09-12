@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using ModelContextProtocol.Server;
 
 namespace Detour.Api;
@@ -39,14 +40,14 @@ public sealed class TripMcpTools(TripService service, TripItemEditor editor)
         return Page(snapshot.Version, "places", JsonSerializer.SerializeToNode(places, JsonOptions)!.AsArray().ToArray(), offset, limit);
     }
 
-    [McpServerTool(ReadOnly = false, Destructive = true, OpenWorld = false, Idempotent = true, UseStructuredContent = true)]
-    [Description("Place library. Required on create: name, city. selected marks trip interest; use edit_activity to schedule. Preserve sourceUrl. Create, update or delete only this record. Omitted fields are preserved. Read first; on conflict re-read and reassess instead of blindly retrying. Reuse the same ID when retrying a create; never generate a second ID after an uncertain response.")]
+    [McpServerTool(ReadOnly = false, Destructive = true, OpenWorld = true, Idempotent = true, UseStructuredContent = true)]
+    [Description("Place library. Required on create: name, city. selected marks trip interest; use edit_activity to schedule. Preserve sourceUrl. changes.photo imports a public image URL with optional attribution; omit photo to preserve it, or use photo: null or clearFields photo to remove it. Place fields and photo commit together. Create, update or delete only this record. Read first; on conflict re-read and reassess instead of blindly retrying. Reuse the same ID when retrying a create; never generate a second ID after an uncertain response.")]
     public Task<ItemEditResult> EditPlace(
         EditOperation operation,
         [Description("Existing record ID for update/delete; new stable unique ID for create. Never update by name.")] string id,
         [Description("Latest version returned by a read or successful edit.")] long expectedVersion,
-        PlaceChanges? changes = null,
-        [Description("Optional camelCase nullable field names to explicitly clear, e.g. dueDate. Omitted or null changes preserve existing values. Do not include a field in both changes and clearFields.")] string[]? clearFields = null,
+        [Description("Only place fields to set. Omit photo to preserve it; photo null removes it; a photo object imports and replaces it.")] PlaceChanges? changes = null,
+        [Description("Optional camelCase nullable field names to explicitly clear, including photo. Do not include a field in both changes and clearFields.")] string[]? clearFields = null,
         CancellationToken cancellationToken = default)
         => Edit("places", operation, id, expectedVersion, changes, clearFields, cancellationToken);
 
@@ -137,7 +138,23 @@ public sealed class TripMcpTools(TripService service, TripItemEditor editor)
     }
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-    private static readonly JsonSerializerOptions PatchOptions = new(JsonSerializerDefaults.Web) { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
+    private static readonly JsonSerializerOptions PatchOptions = CreatePatchOptions();
+
+    private static JsonSerializerOptions CreatePatchOptions()
+    {
+        var resolver = new DefaultJsonTypeInfoResolver();
+        resolver.Modifiers.Add(typeInfo =>
+        {
+            if (typeInfo.Type != typeof(PlaceChanges)) return;
+            var photo = typeInfo.Properties.Single(property => property.Name == "photo");
+            photo.ShouldSerialize = (instance, _) => ((PlaceChanges)instance).PhotoSpecified;
+        });
+        return new(JsonSerializerDefaults.Web)
+        {
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+            TypeInfoResolver = resolver
+        };
+    }
 }
 
 public sealed record TripReadResult(long Version, string Section, JsonNode Data, int? Total = null, int? NextOffset = null);

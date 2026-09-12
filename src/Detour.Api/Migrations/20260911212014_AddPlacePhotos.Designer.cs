@@ -3,6 +3,7 @@ using System;
 using Detour.Api;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Detour.Api.Migrations
 {
     [DbContext(typeof(TripDbContext))]
-    partial class TripDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260911212014_AddPlacePhotos")]
+    partial class AddPlacePhotos
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -84,20 +87,6 @@ namespace Detour.Api.Migrations
                         .HasDatabaseName("UserNameIndex");
 
                     b.ToTable("AspNetUsers", (string)null);
-                });
-
-            modelBuilder.Entity("Detour.Api.PhotoObjectDeletion", b =>
-                {
-                    b.Property<string>("ObjectKey")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<DateTimeOffset>("NotBefore")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("ObjectKey");
-
-                    b.ToTable("PhotoObjectDeletions");
                 });
 
             modelBuilder.Entity("Detour.Api.PlacePhotoRow", b =>

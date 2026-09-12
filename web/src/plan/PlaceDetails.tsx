@@ -1,5 +1,5 @@
 import {useEffect,useRef,useState} from "react";
-import {X,Plus,Check,ExternalLink} from "lucide-react";
+import {X,Plus,Check,ExternalLink,Camera} from "lucide-react";
 import type {Place} from "../types";
 import {photoFor,PlacePhoto} from "../mockups/design-kit";
 import "./PlaceDetails.css";
@@ -34,12 +34,14 @@ function detailContent(place:Place) {
 
 function PhotoViewer({place,onClose}:{place:Place;onClose:()=>void}) {
  const dialog=useRef<HTMLDialogElement>(null);
- const {photo,caption}=photoFor(place);
+ const {photo,caption,credit,sourceUrl}=photoFor(place);
+ const [failedUrl,setFailedUrl]=useState<string|null>(null);
+ const failed=Boolean(photo?.url&&failedUrl===photo.url);
  useEffect(()=>{dialog.current?.showModal()},[]);
  return <dialog ref={dialog} className="place-photo-viewer" aria-label={`Photo of ${place.name}`} onCancel={e=>{e.stopPropagation();onClose()}} onClick={e=>{if(e.target===e.currentTarget)onClose()}}>
   <button type="button" className="photo-viewer-close" aria-label="Close photo" onClick={onClose}><X size={22}/></button>
-  <img src={photo?.url} alt={caption||place.name}/>
-  <div className="photo-viewer-caption"><span>{caption||place.name}</span><a href={photo?.fileSource||photo?.source} target="_blank" rel="noreferrer">Photo source <ExternalLink size={13}/></a></div>
+  {photo&&!failed?<img src={photo.url} alt={caption} onError={()=>setFailedUrl(photo.url)}/>:<div className="photo-viewer-fallback"><Camera size={32}/><span>Photo unavailable</span></div>}
+  <div className="photo-viewer-caption"><span>{caption||place.name}</span>{sourceUrl?<a href={sourceUrl} target="_blank" rel="noreferrer">{credit} <ExternalLink size={13}/></a>:credit?<span>{credit}</span>:null}</div>
  </dialog>;
 }
 

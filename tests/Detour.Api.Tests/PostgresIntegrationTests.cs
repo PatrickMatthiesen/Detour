@@ -1,7 +1,9 @@
+using System.Collections.Concurrent;
 using System.Net;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
+using System.Net.Http.Json;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Hosting;
@@ -13,6 +15,8 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Npgsql;
@@ -473,6 +477,125 @@ public sealed class PostgresIntegrationTests : IAsyncLifetime
         }
     }
 
+    [Fact]
+    public async Task Authenticated_http_photo_roundtrip_is_private_and_survives_full_trip_replace()
+    {
+        if (!HasDatabase()) return;
+        var previousConnection = Environment.GetEnvironmentVariable("ConnectionStrings__tripdb");
+        var previousLocal = Environment.GetEnvironmentVariable("Auth__AllowLocalDev");
+        var previousClientId = Environment.GetEnvironmentVariable("Auth__Google__ClientId");
+        var previousClientSecret = Environment.GetEnvironmentVariable("Auth__Google__ClientSecret");
+        var previousAllowed = Environment.GetEnvironmentVariable("Auth__AllowedEmails__0");
+        Environment.SetEnvironmentVariable("ConnectionStrings__tripdb", connection);
+        Environment.SetEnvironmentVariable("Auth__AllowLocalDev", "false");
+        Environment.SetEnvironmentVariable("Auth__Google__ClientId", "photo-test-client");
+        Environment.SetEnvironmentVariable("Auth__Google__ClientSecret", "photo-test-secret");
+        Environment.SetEnvironmentVariable("Auth__AllowedEmails__0", "photo-owner@example.test");
+        try
+        {
+            var store = new HttpPhotoStore();
+            using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+            {
+                builder.UseEnvironment("Development");
+                builder.ConfigureTestServices(services =>
+                {
+                    services.RemoveAll<IPhotoObjectStore>();
+                    services.AddSingleton<IPhotoObjectStore>(store);
+                    services.PostConfigure<GoogleOptions>(GoogleDefaults.AuthenticationScheme, options =>
+                    {
+                        options.AuthorizationEndpoint = "https://accounts.google.test/o/oauth2/v2/auth";
+                        options.TokenEndpoint = "https://oauth2.google.test/token";
+                        options.UserInformationEndpoint = "https://oauth2.google.test/userinfo";
+                        options.Backchannel = new HttpClient(new GoogleBackchannelHandler("photo-owner@example.test", true));
+                    });
+                });
+            });
+            using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new Uri("https://localhost"), AllowAutoRedirect = false });
+
+            using var anonymous = await client.GetAsync($"/api/places/missing/photo?v={Guid.NewGuid():N}");
+            Assert.Contains(anonymous.StatusCode, new[] { HttpStatusCode.Unauthorized, HttpStatusCode.Redirect });
+            await CompleteGoogleLoginAsync(client, "/");
+
+            using var read = await client.GetAsync("/api/trip");
+            read.EnsureSuccessStatusCode();
+            var snapshot = JsonSerializer.Deserialize<TripSnapshot>(await read.Content.ReadAsStringAsync(), JsonOptions)!;
+            snapshot.Places.Add(new Place { Id = "http-photo-place", Name = "HTTP photo place", City = "Tokyo" });
+            var csrf = JsonSerializer.Deserialize<JsonElement>(await (await client.GetAsync("/auth/csrf")).Content.ReadAsStringAsync(), JsonOptions).GetProperty("token").GetString();
+            using var replace = new HttpRequestMessage(HttpMethod.Put, "/api/trip") { Content = JsonContent.Create(snapshot) };
+            replace.Headers.TryAddWithoutValidation("X-CSRF-TOKEN", csrf);
+            replace.Headers.TryAddWithoutValidation("If-Match", snapshot.Version.ToString());
+            using var savedResponse = await client.SendAsync(replace);
+            savedResponse.EnsureSuccessStatusCode();
+            var saved = JsonSerializer.Deserialize<TripSnapshot>(await savedResponse.Content.ReadAsStringAsync(), JsonOptions)!;
+
+            using var form = new MultipartFormDataContent();
+            form.Add(new StringContent(saved.Version.ToString()), "expectedVersion");
+            form.Add(new StringContent("https://example.test/photo"), "sourceUrl");
+            form.Add(new StringContent("Photo Author"), "author");
+            form.Add(new StringContent("Tokyo"), "caption");
+            form.Add(new StringContent("place"), "kind");
+            form.Add(new ByteArrayContent(Convert.FromBase64String(TinyPng)), "file", "photo.png");
+            using var upload = new HttpRequestMessage(HttpMethod.Post, "/api/places/http-photo-place/photo/upload") { Content = form };
+            upload.Headers.TryAddWithoutValidation("X-CSRF-TOKEN", csrf);
+            using var uploaded = await client.SendAsync(upload);
+            uploaded.EnsureSuccessStatusCode();
+            var uploadedResult = JsonSerializer.Deserialize<PhotoOperationResult>(await uploaded.Content.ReadAsStringAsync(), JsonOptions)!;
+            Assert.True(uploadedResult.Success);
+            Assert.NotNull(uploadedResult.Photo);
+
+            using var image = await client.GetAsync(uploadedResult.Photo!.Url);
+            image.EnsureSuccessStatusCode();
+            Assert.True(image.Headers.CacheControl?.Private);
+            Assert.True(image.Headers.CacheControl?.NoStore);
+            Assert.NotEmpty(await image.Content.ReadAsByteArrayAsync());
+
+            var current = JsonSerializer.Deserialize<TripSnapshot>(await (await client.GetAsync("/api/trip")).Content.ReadAsStringAsync(), JsonOptions)!;
+            current.Places.Single(x => x.Id == "http-photo-place").Name = "Renamed HTTP photo place";
+            using var preserve = new HttpRequestMessage(HttpMethod.Put, "/api/trip") { Content = JsonContent.Create(current) };
+            preserve.Headers.TryAddWithoutValidation("X-CSRF-TOKEN", csrf);
+            preserve.Headers.TryAddWithoutValidation("If-Match", current.Version.ToString());
+            using var preserved = await client.SendAsync(preserve);
+            preserved.EnsureSuccessStatusCode();
+            var canonical = JsonSerializer.Deserialize<TripSnapshot>(await preserved.Content.ReadAsStringAsync(), JsonOptions)!;
+            Assert.Equal(uploadedResult.Photo.Id, canonical.Places.Single(x => x.Id == "http-photo-place").Photo!.Id);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("ConnectionStrings__tripdb", previousConnection);
+            Environment.SetEnvironmentVariable("Auth__AllowLocalDev", previousLocal);
+            Environment.SetEnvironmentVariable("Auth__Google__ClientId", previousClientId);
+            Environment.SetEnvironmentVariable("Auth__Google__ClientSecret", previousClientSecret);
+            Environment.SetEnvironmentVariable("Auth__AllowedEmails__0", previousAllowed);
+        }
+    }
+
+    [Fact]
+    public async Task Concurrent_postgres_photo_imports_allow_exactly_one_version_to_win()
+    {
+        if (!HasDatabase()) return;
+        await using var setup = CreateDb();
+        var seed = CreateService(setup, "photo-race-owner");
+        var initial = await seed.GetSnapshotAsync();
+        initial.Places.Add(new Place { Id = "photo-race-place", Name = "Photo race", City = "Tokyo" });
+        var saved = Assert.IsType<ReplaceResult.Success>(await seed.ReplaceAsync(initial, initial.Version));
+        var store = new HttpPhotoStore();
+        await using var db1 = CreateDb();
+        await using var db2 = CreateDb();
+        var downloader = new PhotoDownloader(new StaticPhotoHttpClientFactory());
+        var service1 = new TripService(db1, PhotoOwner("photo-race-owner"), new PhotoImportService(db1, downloader, store));
+        var service2 = new TripService(db2, PhotoOwner("photo-race-owner"), new PhotoImportService(db2, downloader, store));
+        var left = new TripItemEditor(service1).EditAsync("places", "update", "photo-race-place",
+            System.Text.Json.Nodes.JsonNode.Parse("""{"photo":{"url":"https://images.example.test/one.png"}}""")!.AsObject(), saved.Snapshot.Version);
+        var right = new TripItemEditor(service2).EditAsync("places", "update", "photo-race-place",
+            System.Text.Json.Nodes.JsonNode.Parse("""{"photo":{"url":"https://images.example.test/two.png"}}""")!.AsObject(), saved.Snapshot.Version);
+        var results = await Task.WhenAll(left, right);
+        Assert.Equal(1, results.Count(x => x.Success));
+        Assert.Equal(1, results.Count(x => x.Error == "version_conflict"));
+        await using var verify = CreateDb();
+        Assert.Single(verify.PlacePhotos.Where(x => x.OwnerId == "photo-race-owner"));
+        Assert.Equal(saved.Snapshot.Version + 1, (await CreateService(verify, "photo-race-owner").GetSnapshotAsync()).Version);
+    }
+
     private static async Task CompleteGoogleLoginAsync(HttpClient client, string returnPath)
     {
         using var login = await client.GetAsync($"/auth/login?returnUrl={Uri.EscapeDataString(returnPath)}");
@@ -487,6 +610,47 @@ public sealed class PostgresIntegrationTests : IAsyncLifetime
         using var completed = await client.GetAsync(callback.OriginalString);
         Assert.Equal(HttpStatusCode.Redirect, completed.StatusCode);
         Assert.Equal(returnPath, Assert.IsType<Uri>(completed.Headers.Location).OriginalString);
+    }
+
+    private static OwnerAccessor PhotoOwner(string owner)
+    {
+        var context = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity([new Claim("sub", owner)], "test")) };
+        return new OwnerAccessor(new FixedHttpContextAccessor(context), new ConfigurationBuilder().Build());
+    }
+
+    private sealed class StaticPhotoHttpClientFactory : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name) => new(new StaticPhotoHandler());
+        private sealed class StaticPhotoHandler : HttpMessageHandler
+        {
+            protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+            {
+                var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(Convert.FromBase64String(TinyPng)) };
+                response.Content.Headers.ContentType = new("image/png");
+                return Task.FromResult(response);
+            }
+        }
+    }
+
+    private const string TinyPng = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+
+    private static PlacePhotoService CreatePhotoService(TripDbContext db, TripService service, string owner, HttpPhotoStore store)
+    {
+        var context = new DefaultHttpContext { Connection = { RemoteIpAddress = IPAddress.Loopback } };
+        context.Request.Host = new HostString("localhost");
+        context.User = new ClaimsPrincipal(new ClaimsIdentity([new Claim("sub", owner)], "test"));
+        var accessor = new OwnerAccessor(new FixedHttpContextAccessor(context), new ConfigurationBuilder().AddInMemoryCollection().Build());
+        return new PlacePhotoService(db, accessor, service, store, NullLogger<PlacePhotoService>.Instance);
+    }
+
+    private sealed class EmptyHttpClientFactory : IHttpClientFactory { public HttpClient CreateClient(string name) => new(); }
+
+    private sealed class HttpPhotoStore : IPhotoObjectStore
+    {
+        private readonly ConcurrentDictionary<string, byte[]> objects = new();
+        public async Task PutAsync(string key, Stream content, string type, long length, CancellationToken ct) { await using var buffer = new MemoryStream(); await content.CopyToAsync(buffer, ct); objects[key] = buffer.ToArray(); }
+        public Task<PhotoObject?> GetAsync(string key, CancellationToken ct) => Task.FromResult(objects.TryGetValue(key, out var bytes) ? new PhotoObject(new MemoryStream(bytes), "image/jpeg", bytes.Length) : null);
+        public Task DeleteAsync(string key, CancellationToken ct) { objects.TryRemove(key, out _); return Task.CompletedTask; }
     }
 
     private static string Base64UrlEncode(byte[] bytes)

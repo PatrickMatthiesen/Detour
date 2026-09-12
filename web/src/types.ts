@@ -1,5 +1,15 @@
 export type Priority = "required" | "high" | "nice" | "none";
 
+export interface PlacePhotoMetadata {
+  id: string;
+  url: string;
+  sourceUrl: string | null;
+  author?: string | null;
+  caption: string | null;
+  kind: "place" | "neighbourhood" | "illustrative";
+  license?: string | null;
+}
+
 export interface Place {
   id: string;
   name: string;
@@ -21,6 +31,7 @@ export interface Place {
   latitude?: number | null;
   longitude?: number | null;
   selected?: boolean;
+  photo?: PlacePhotoMetadata | null;
 }
 
 export interface Activity {

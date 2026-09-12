@@ -52,7 +52,20 @@ public sealed class Place
     public bool Selected { get; set; }
     public bool? ReservationRequired { get; set; }
     public string? OpeningHours { get; set; }
+    private PhotoDescriptor? photo;
+    public PhotoDescriptor? Photo { get => photo; set { photo = value; PhotoSpecified = true; } }
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool PhotoSpecified { get; private set; }
 }
+
+public sealed record PhotoDescriptor(
+    Guid Id,
+    string Url,
+    string? SourceUrl,
+    string? Author,
+    string? Caption,
+    string Kind,
+    string? License);
 
 public sealed class Stay
 {
@@ -136,4 +149,5 @@ public abstract record ReplaceResult
     public sealed record Success(TripSnapshot Snapshot) : ReplaceResult;
     public sealed record Conflict(TripSnapshot Snapshot) : ReplaceResult;
     public sealed record Invalid : ReplaceResult;
+    public sealed record PhotoFailed(string Message) : ReplaceResult;
 }

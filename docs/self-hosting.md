@@ -15,6 +15,8 @@ Configure the GitHub **Production** environment:
 | `TS_OAUTH_CLIENT_ID`, `TS_OAUTH_SECRET` | Tailscale CI credentials, authorized for `tag:ci` |
 | `SSH_HOST`, `SSH_USER` | Tailscale SSH target with Docker access |
 | `POSTGRES_PASSWORD` | Persistent database password; retain across deployments |
+| `GARAGE_RPC_SECRET`, `GARAGE_ADMIN_TOKEN`, `GARAGE_SECRET_ACCESS_KEY` | Three independent random 64-character hex secrets; retain across deployments |
+| `GARAGE_ACCESS_KEY_ID` | Stable S3 key ID: `GK` followed by 24 random hexadecimal characters |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google web OAuth client |
 | `OWNER_EMAIL` | Allowed Google account |
 
@@ -33,6 +35,8 @@ Configure the GitHub **Production** environment:
 4. Run **Deploy Detour** from Actions, then point the hostname's Cloudflare Tunnel route to `http://<docker-vm-lan-ip>:48327` from the proxy VM. Do not put an interactive Cloudflare Access challenge in front of OAuth/MCP routes.
 5. Verify Google login, rejected users, OAuth discovery, and a ChatGPT read/write round trip. The workflow checks local HTTP health; external OAuth still needs this first-deployment check.
 
-Production uses Compose project `detour` and persistent PostgreSQL storage derived from `detour-postgres-data`. Keep backups of the database and authentication keys. Do not delete volumes during updates. Production does not import the private development seed automatically.
+Production uses Compose project `detour` and persistent volumes derived from `detour-postgres-data` and `detour-garage-data`. Keep backups of the database, Garage volume and authentication keys. Do not delete volumes during updates. Production does not import the private development seed or legacy photo backup automatically. See [photo migration](photos.md).
 
-Deployment has not yet been exercised on the target server. Server credentials, the writable keys directory, and the tunnel route are configured when ready to deploy.
+Garage's S3/admin/RPC ports are internal to the Compose network. The API receives the bucket connection string; the separate one-shot provisioner receives admin credentials and creates the bucket before the API starts. The workflow downloads the checksum-pinned hosting integration and uses a digest-pinned provisioner image. Configure the four Garage secrets once before the first photo-enabled deployment; the workflow fails early if they are missing instead of generating new credentials on each CI run.
+
+After deploying the photo-enabled version, verify an authenticated image import and reload before migrating the remaining legacy photos. Keep the local backup until the production migration is confirmed.
