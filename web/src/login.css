@@ -5,7 +5,7 @@
 .login-welcome p { margin-top: 24px; font-size: 18px; line-height: 1.6; color: #627574; }
 .login-route { display: block; width: 100%; max-width: 420px; margin-top: 30px; }
 .login-panel { background: #fff; border: 1px solid #e0e6df; border-radius: 18px; padding: clamp(28px, 3vw, 44px); box-shadow: 0 12px 40px #29413708; }
-.login-symbol { color: #507970; margin-bottom: 28px; }
+.login-symbol { margin-bottom: 28px; }
 .login-panel h2 { font: 600 27px/1.2 'IBM Plex Sans', sans-serif; letter-spacing: -.7px; }
 .login-panel p { margin-top: 12px; color: #627574; font-size: 16px; line-height: 1.55; }
 .login-google { margin-top: 28px; width: 100%; display: flex; justify-content: center; align-items: center; gap: 12px; padding: 14px 16px; background: #fff; color: #263b3e; border: 1px solid #b7c3bc; border-radius: 8px; font-size: 15px; font-weight: 500; }

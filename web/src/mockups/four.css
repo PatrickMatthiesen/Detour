@@ -152,8 +152,8 @@
 }
 .d4-city-tabs button:hover,
 .d4-city-tabs button.is-active {
-  border-bottom-color: var(--d4-blue);
-  color: var(--d4-blue);
+  border-bottom-color: var(--d4-ink);
+  color: var(--d4-ink);
   font-weight: 800;
 }
 .d4-filter-tools {
@@ -773,7 +773,7 @@
 .d4-page .dk-nav > a {color:#b7493b;}
 .d4-page .dk-nav nav a.dk-active {background:#fbe6df;color:#a73d32;}
 .d4-browse-panel {background:#f7f8f3;}
-.d4-page .d4-selection-count {background:#dceddf;color:#31644b;font-size:11px;}
+.d4-page .d4-selection-count {background:#f9eae5;color:var(--status-picked);font-size:11px;}
 .d4-city-tabs {grid-template-columns:repeat(3,minmax(0,1fr)) 100px;gap:8px;flex-shrink:0;}
 .d4-more-cities {background:transparent;border:0;color:var(--d4-muted);font:inherit;font-size:11px;min-width:0;align-self:start;padding-bottom:10px;}
 .d4-search-bar {display:flex;align-items:center;gap:10px;border:1px solid #d6ddd8;border-radius:9px;background:#fff;min-height:42px;margin-bottom:12px;flex-shrink:0;overflow:hidden;color:#798884;}
@@ -793,16 +793,29 @@
 .d4-place-card {background:white;border-color:#e4e7df;}
 .d4-card-copy small {color:var(--category-ink);}
 .d4-card-copy {border-top:3px solid var(--category-bg);}
-.d4-place-card.is-selected {border-color:#bd493b;}
+.d4-place-card.is-selected {border-color:var(--status-picked);}
 .d4-place-card:hover,.d4-place-card.is-focused {border-color:#b7c9bf;box-shadow:0 3px 10px #33483910;}
 .d4-inspector-select:hover,.d4-inspector-select.is-selected {background:#983d34;border-color:#983d34;}
 .d4-inspector-area {text-transform:none;letter-spacing:0;font-size:12px;}
-.d4-stays {background:#fffdf8;grid-template-columns:40px minmax(0,1fr);gap:10px;padding:10px 14px;overflow:visible;}
-.d4-stays-list {display:grid;grid-template-columns:repeat(11,minmax(0,1fr));gap:5px;overflow:visible;}
-.d4-stay {display:block;min-width:0;border:0;border-top:3px solid #b9d3c9;border-radius:3px;background:#edf4ee;padding:7px 5px;text-align:left;color:var(--d4-ink);}
-.d4-stay:nth-child(3n+2) {border-top-color:#e8c78c;background:#fcf3e3;}
-.d4-stay:nth-child(3n) {border-top-color:#cabbda;background:#f3eef7;}
-.d4-stay[aria-pressed="true"] {border-top-color:#cb5745;background:#fbe9e2;}
+.d4-stays {background:#fffdf8;grid-template-columns:40px minmax(0,1fr);gap:7px 10px;padding:10px 14px;overflow:visible;}
+.d4-stays-label {grid-row:1 / span 2;align-self:center;}
+.d4-route-heading {grid-column:2;display:flex;align-items:center;justify-content:space-between;gap:12px;color:var(--d4-muted);font-size:11px;}
+.d4-route-heading>span,.d4-transport-bookings summary {display:flex;align-items:center;gap:5px;}
+.d4-transport-bookings {position:relative;}
+.d4-transport-bookings summary {cursor:pointer;text-decoration:underline;text-underline-offset:3px;}
+.d4-transport-summary {position:absolute;bottom:100%;right:0;z-index:5;width:270px;padding:12px;background:white;border:1px solid #d6ddd8;border-radius:6px;box-shadow:0 3px 12px #263b591a;}
+.d4-transport-summary>div {display:flex;align-items:center;gap:7px;margin-bottom:8px;color:var(--item-status);}
+.d4-transport-summary p {margin:0;font-size:11px;line-height:1.5;}
+.d4-page [data-status="saved"] {--item-status:var(--status-saved);}
+.d4-page [data-status="picked"] {--item-status:var(--status-picked);}
+.d4-page [data-status="partial"] {--item-status:var(--status-partial);}
+.d4-page [data-status="booked"] {--item-status:var(--status-booked);}
+.d4-stay-status>svg {flex:none;}
+.d4-stay .d4-stay-status {display:flex;align-items:center;gap:4px;color:var(--item-status);white-space:normal;margin-top:3px;}
+.d4-stays-list {grid-column:2;display:grid;grid-template-columns:repeat(11,minmax(0,1fr));gap:5px;overflow:visible;}
+.d4-stay {display:block;min-width:0;border:0;border-top:2px solid var(--item-status);border-radius:3px;background:color-mix(in srgb,var(--item-status) 7%,white);padding:7px 5px;text-align:left;color:var(--d4-ink);}
+.d4-stay[aria-pressed="true"] {outline:2px solid #334155;outline-offset:2px;}
+.d4-stay:focus-visible {outline:2px solid #334155;outline-offset:2px;}
 .d4-stay strong {font-size:11px;line-height:1.25;white-space:normal;}
 .d4-stay small {font-size:10px;white-space:nowrap;}
 @media(max-width:1100px) {
@@ -811,6 +824,7 @@
 @media(max-width:640px) {
   .d4-page[data-palette="journey"] {grid-template-rows:48px minmax(0,1fr) auto;}
   .d4-stays {grid-template-columns:1fr;gap:5px;padding:7px 10px;}
+  .d4-route-heading,.d4-stays-list {grid-column:1;}
   .d4-workspace {grid-template-rows:minmax(160px,30%) minmax(0,70%);}
   .d4-stays-label {display:none;}
   .d4-stays-list {grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;}

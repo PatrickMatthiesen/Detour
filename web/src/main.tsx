@@ -27,7 +27,6 @@ import {
   Check,
   ChevronRight,
   CircleAlert,
-  Compass,
   Edit3,
   Filter,
   Hotel,
@@ -53,6 +52,7 @@ import {
   saveTrip,
 } from "./api";
 import { LoginScreen } from "./LoginScreen";
+import { DetourIcon } from "./DetourIcon";
 import PreparePage from "./prepare/PreparePage";
 import { PlacesExplorer } from "./mockups/ConceptFour";
 import { displayPlaces, shortDate } from "./mockups/design-kit";
@@ -203,7 +203,7 @@ function App() {
         <main className="main-shell">
           <header className="topbar">
             <div className="mobile-mark">
-              <Compass size={18} />
+              <DetourIcon size={24} />
               <span>DETOUR</span>
             </div>
             <div className="trip-switcher">
@@ -305,7 +305,7 @@ function Sidebar({
   return (
     <aside className="sidebar">
       <div className="brand">
-        <Compass size={22} strokeWidth={1.7} />
+        <DetourIcon size={30} />
         <span>DETOUR</span>
       </div>
       <div className="sidebar-trip">
@@ -2336,7 +2336,7 @@ function AuthenticatedDetourApp({session}: {session: Awaited<ReturnType<typeof g
   const [editing, setEditing] = useState<Place|null>(null);
   const { snapshot } = state;
   const header = <header className="detour-nav">
-    <Link to="/" className="detour-brand"><Compass size={21}/>Detour</Link>
+    <Link to="/" className="detour-brand"><DetourIcon/>Detour</Link>
     <span className="detour-trip">{snapshot.trip.name}<small>{shortDate(snapshot.trip.startDate)} – {shortDate(snapshot.trip.endDate)}</small></span>
     <nav aria-label="Main navigation">
       <Link to="/" aria-current={pathname === "/" ? "page" : undefined}>Places</Link>

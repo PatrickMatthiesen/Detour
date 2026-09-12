@@ -1,4 +1,4 @@
-import { Compass } from "lucide-react";
+import { DetourIcon } from "./DetourIcon";
 import "./login.css";
 
 export function LoginScreen({ mode, googleConfigured = true, expired = false, onRetry }: {
@@ -19,7 +19,7 @@ export function LoginScreen({ mode, googleConfigured = true, expired = false, on
     : failure === "failed" ? "Sign-in wasn’t completed. Please try again."
     : expired ? "Your session has ended. Sign in again to continue." : "";
   return <main className="login-page">
-    <a className="login-brand" href="/" aria-label="Detour home"><Compass size={29}/>Detour</a>
+    <a className="login-brand" href="/" aria-label="Detour home"><DetourIcon size={36}/>Detour</a>
     <div className="login-layout">
       <section className="login-welcome">
         <h1>A little room<br/>for a detour.</h1>
@@ -31,7 +31,7 @@ export function LoginScreen({ mode, googleConfigured = true, expired = false, on
         </svg>
       </section>
       <section className="login-panel" aria-labelledby="login-heading">
-        <Compass className="login-symbol" size={34}/>
+        <DetourIcon className="login-symbol" size={48}/>
         <h2 id="login-heading">Welcome to Detour</h2>
         {mode === "loading" ? <p role="status">Getting things ready…</p>
           : mode === "error" ? <><p role="alert">We couldn’t connect to Detour.</p><button className="login-google" onClick={onRetry}>Try again</button></>
