@@ -19,7 +19,7 @@ public sealed class TripItemEditorTests
             Id = "place-1",
             Name = "Old name",
             City = "Tokyo",
-            Area = "Asakusa",
+            Area = "Asakusa", Latitude = 35.68, Longitude = 139.7,
             Notes = "Keep me",
             SourceUrl = "https://example.test/source"
         });
@@ -127,7 +127,7 @@ public sealed class TripItemEditorTests
         await using var db = CreateDb();
         var (service, editor) = CreateEditor(db);
         var initial = await service.GetSnapshotAsync();
-        initial.Places.Add(new Place { Id = "place-1", Name = "Temple", City = "Kyoto" });
+        initial.Places.Add(new Place { Id = "place-1", Name = "Temple", City = "Kyoto", Latitude = 35.01, Longitude = 135.76 });
         initial.Activities.Add(new Activity { Id = "activity-1", PlaceId = "place-1", Date = new DateOnly(2026, 10, 1) });
         initial.Bookings.Add(new Booking { Id = "booking-1", Title = "Hotel" });
         initial.Stays.Add(new Stay
@@ -160,7 +160,7 @@ public sealed class TripItemEditorTests
         await using var db = CreateDb();
         var (service, editor) = CreateEditor(db);
         var initial = await service.GetSnapshotAsync();
-        initial.Places.Add(new Place { Id = "place-1", Name = "Temple", City = "Kyoto" });
+        initial.Places.Add(new Place { Id = "place-1", Name = "Temple", City = "Kyoto", Latitude = 35.01, Longitude = 135.76 });
         initial.Bookings.Add(new Booking { Id = "booking-1", Title = "Flight" });
         initial.Tasks.Add(new TripTask { Id = "task-1", Title = "Check passport", Scope = "trip" });
         initial.PackingItems.Add(new PackingItem { Id = "pack-1", Name = "Passport" });

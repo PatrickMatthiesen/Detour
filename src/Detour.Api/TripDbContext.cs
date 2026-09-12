@@ -38,15 +38,42 @@ public sealed class PhotoObjectDeletion
     public DateTimeOffset NotBefore { get; set; }
 }
 
+// Google Places coordinates expire separately from the user's trip document.
+public sealed class GooglePlaceLocationRow
+{
+    public string OwnerId { get; set; } = "";
+    public string PlaceId { get; set; } = "";
+    public string MapsUrl { get; set; } = "";
+    public string Query { get; set; } = "";
+    public string GooglePlaceId { get; set; } = "";
+    public double? Latitude { get; set; }
+    public double? Longitude { get; set; }
+    public DateTimeOffset ExpiresAt { get; set; }
+    public DateTimeOffset RefreshAfter { get; set; }
+    public Guid Revision { get; set; } = Guid.NewGuid();
+}
+
 public sealed class TripDbContext(DbContextOptions<TripDbContext> options) : IdentityDbContext<ApplicationUser>(options)
 {
     public DbSet<TripDocumentRow> Trips => Set<TripDocumentRow>();
     public DbSet<PlacePhotoRow> PlacePhotos => Set<PlacePhotoRow>();
     public DbSet<PhotoObjectDeletion> PhotoObjectDeletions => Set<PhotoObjectDeletion>();
+    public DbSet<GooglePlaceLocationRow> GooglePlaceLocations => Set<GooglePlaceLocationRow>();
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
         modelBuilder.UseOpenIddict();
+        modelBuilder.Entity<GooglePlaceLocationRow>(entity =>
+        {
+            entity.HasKey(x => new { x.OwnerId, x.PlaceId });
+            entity.Property(x => x.OwnerId).HasMaxLength(200);
+            entity.Property(x => x.PlaceId).HasMaxLength(200);
+            entity.Property(x => x.MapsUrl).HasMaxLength(2048);
+            entity.Property(x => x.Query).HasMaxLength(2048);
+            entity.Property(x => x.GooglePlaceId).HasMaxLength(500);
+            entity.Property(x => x.Revision).IsConcurrencyToken();
+            entity.HasIndex(x => x.ExpiresAt);
+        });
         modelBuilder.Entity<PhotoObjectDeletion>(entity =>
         {
             entity.HasKey(x => x.ObjectKey);

@@ -987,7 +987,9 @@ function EditPlaceModal({
 }) {
   const [draft, setDraft] = useState(place);
   const set = (key: keyof Place, value: string | number | null) =>
-    setDraft((current) => ({ ...current, [key]: value }));
+    setDraft((current) => ({ ...current, [key]: value,
+      ...(key === "latitude" || key === "longitude" ? { coordinatesFromGoogle: false } : {}),
+    }));
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (draft.name.trim())
@@ -995,6 +997,7 @@ function EditPlaceModal({
         ...draft,
         name: draft.name.trim(),
         city: draft.city.trim() || "Unknown city",
+        resolveCoordinates: (draft.latitude == null || draft.longitude == null) && !!draft.googleMapsUrl?.trim(),
       });
   };
   return (
@@ -1089,6 +1092,17 @@ function EditPlaceModal({
               onChange={(e) => set("sourceUrl", e.target.value)}
               type="url"
             />
+          </label>
+          <label className="span-2">
+            Google Maps URL
+            <input
+              value={draft.googleMapsUrl || ""}
+              onChange={(e) => set("googleMapsUrl", e.target.value)}
+              placeholder="https://www.google.com/maps/…"
+            />
+            {(draft.latitude == null || draft.longitude == null) && draft.googleMapsUrl?.trim()
+              ? <small>Saving will look up the missing coordinates. You can save again to retry a failed lookup.</small>
+              : null}
           </label>
           <label className="span-2">
             Notes

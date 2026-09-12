@@ -85,6 +85,15 @@ public sealed class TripItemEditor(TripService service)
             return Failure(snapshot.Version, "invalid_changes", patchResult.Error);
 
         var edited = patchResult.Item!;
+        if (edited is Place locationPlace)
+        {
+            locationPlace.GoogleMapsUrl = GoogleMapsCoordinates.NormalizeUrl(locationPlace.GoogleMapsUrl);
+            locationPlace.ResolveCoordinates = !GoogleMapsCoordinates.IsValid(locationPlace.Latitude, locationPlace.Longitude)
+                && !string.IsNullOrWhiteSpace(locationPlace.GoogleMapsUrl);
+        }
+        if (edited is Place editedPlace && changes is not null
+            && (changes.ContainsKey("latitude") || changes.ContainsKey("longitude")))
+            editedPlace.CoordinatesFromGoogle = false;
         var validationError = ValidateEditedItem(snapshot, edited, operation == "create", changes);
         if (validationError is not null)
             return Failure(snapshot.Version, "validation_failed", validationError);
@@ -113,7 +122,7 @@ public sealed class TripItemEditor(TripService service)
                 "version_conflict",
                 $"The trip changed while saving. Re-read version {conflict.Snapshot.Version} and reassess the edit.",
                 FindItem(conflict.Snapshot, itemType, id)),
-            ReplaceResult.Invalid => Failure(snapshot.Version, "validation_failed", "The edited item failed trip validation. Check its dates, durations, coordinates, and URLs."),
+            ReplaceResult.Invalid invalid => Failure(snapshot.Version, "validation_failed", invalid.Message ?? "The edited item failed trip validation. Check its dates, durations, coordinates, and URLs."),
             _ => throw new UnreachableException()
         };
     }

@@ -25,6 +25,28 @@ export function cityPlaces(trip:TripSnapshot|null,city:string){return trip?.plac
 export function shortDate(date:string){return new Intl.DateTimeFormat('en-GB',{day:'numeric',month:'short',timeZone:'UTC'}).format(new Date(date.slice(0,10)+'T12:00:00Z'))}
 export function PreviewNav({active}:{active:number}){return <header className="dk-nav"><a href="/" className="dk-trip"><Compass size={19}/><strong>Japan 2026</strong><span>30 Sep – 25 Oct</span></a><nav aria-label="Design alternatives">{designNames.map((n,i)=><a key={n} href={'/'+(i+4)} className={active===i+4?'dk-active':''} title={n}>{i+4}<span>{n}</span></a>)}</nav><span className="dk-preview" title="Your saved trip is unchanged. Reload to reset this preview.">Preview only</span></header>}
 const centers:Record<string,[number,number]>={Tokyo:[139.7,35.68],Kyoto:[135.768,35.012],Osaka:[135.502,34.694],Nagoya:[136.907,35.181],Hakone:[139.025,35.232],Yokohama:[139.638,35.444],Nagano:[138.181,36.648],Fukui:[136.222,36.064],Gifu:[136.76,35.423],Hiroshima:[132.455,34.385],Kurashiki:[133.77,34.585],Onomichi:[133.205,34.408],'Kinosaki Onsen':[134.812,35.624]};
+/** Approximate group anchor, never a substitute for a place's coordinates. */
+export function cityMapCenter(city:string,places:Place[]):[number,number]|undefined {
+ if(centers[city])return centers[city];
+ if(['other','unknown city',''].includes(city.trim().toLowerCase()))return undefined;
+ const points=places.filter(p=>p.city===city&&p.longitude!=null&&p.latitude!=null&&Number.isFinite(p.longitude)&&Number.isFinite(p.latitude)&&Math.abs(p.longitude)<=180&&Math.abs(p.latitude)<=90);
+ if(!points.length)return undefined;
+ // Anchor to a resolved member so a dispersed group is never placed in empty space.
+ return [points[0].longitude!,points[0].latitude!];
+}
+const defaultAreaRadius=(city:string):[number,number]=>city==='Tokyo'?[.23,.13]:[.10,.08];
+/** Return an ellipse perimeter that contains every resolved place in a city. */
+export function cityAreaPerimeter(city:string,points:Array<[number,number]>,center=centers[city]):Array<[number,number]> {
+ if(!center)return [];
+ const [baseX,baseY]=defaultAreaRadius(city);
+ const scale=points.reduce((max,[x,y])=>{
+  if(!Number.isFinite(x)||!Number.isFinite(y))return max;
+  const distance=Math.hypot((x-center[0])/baseX,(y-center[1])/baseY);
+  return Math.max(max,distance);
+ },1)*1.12;
+ const [radiusX,radiusY]=[baseX*scale,baseY*scale];
+ return Array.from({length:49},(_,i)=>{const angle=i/48*Math.PI*2;return [center[0]+radiusX*Math.cos(angle),center[1]+radiusY*Math.sin(angle)]});
+}
 const empty:any={type:'FeatureCollection',features:[]};
 export function DesignMap({places,selected,city,onCity,onPlace,className='',route=false,palette,showInformation=true}:{places:Place[];selected:Set<string>;city?:string;onCity?:(city:string)=>void;onPlace?:(place:Place)=>void;className?:string;route?:boolean;showInformation?:boolean;palette?:'stone'|'sage'|'sand'|'original'|'journey'}){
  const originalPaint=useRef(new Map<string,unknown>());
@@ -36,17 +58,19 @@ export function DesignMap({places,selected,city,onCity,onPlace,className='',rout
  m.addLayer({id:'dk-area-edge',type:'line',source:'dk-areas',paint:{'line-color':['case',['get','active'],'#427de5','#97a5b7'],'line-width':1.5,'line-dasharray':[3,3]}});
  m.addLayer({id:'dk-route-line',type:'line',source:'dk-route',paint:{'line-color':'#5875ad','line-width':2,'line-dasharray':[3,3]}});
  m.addLayer({id:'dk-dots',type:'circle',source:'dk-points',filter:['==',['get','place'],true],paint:{'circle-radius':['interpolate',['linear'],['zoom'],3,1.5,6,2.5,10,4.5,14,7],'circle-color':['case',['get','selected'],'#2463eb','#ffffff'],'circle-stroke-color':'#47648c','circle-stroke-width':['interpolate',['linear'],['zoom'],3,0.6,10,1.5,14,2]}});
- m.addLayer({id:'dk-city-labels',type:'symbol',source:'dk-points',filter:['==',['get','place'],false],layout:{'text-field':['get','label'],'text-font':['Noto Sans Regular'],'text-size':14,'text-padding':10,'text-justify':'center'},paint:{'text-color':['case',['get','selected'],'#225dcc','#263b59'],'text-halo-color':'#ffffff','text-halo-width':3}});
+ m.addLayer({id:'dk-city-labels',type:'symbol',source:'dk-points',filter:['==',['get','place'],false],layout:{'text-field':['step',['zoom'],['get','city'],5,['get','label']],'text-font':['Noto Sans Regular'],'text-size':['interpolate',['linear'],['zoom'],3,11,7,14],'text-padding':2,'text-variable-anchor':['center','top','bottom','left','right','top-left','top-right','bottom-left','bottom-right'],'text-radial-offset':0.6,'text-justify':'auto'},paint:{'text-color':['case',['get','selected'],'#225dcc','#263b59'],'text-halo-color':'#ffffff','text-halo-width':3}});
  m.addLayer({id:'dk-labels',type:'symbol',source:'dk-points',filter:['==',['get','place'],true],minzoom:8,layout:{'text-field':['get','label'],'text-font':['Noto Sans Regular'],'text-size':13,'text-variable-anchor':['top','bottom','left','right'],'text-radial-offset':0.8,'text-justify':'auto'},paint:{'text-color':'#263b59','text-halo-color':'#ffffff','text-halo-width':2}});
+ // Place saved-city labels before lower-priority map and individual-place text.
+ m.moveLayer('dk-city-labels');
  m.on('click','dk-dots',e=>{const p=e.features?.[0]?.properties;if(!p)return;if(p.place){const found=callbacks.current.places.find(x=>x.id===p.id);if(found)callbacks.current.onPlace?.(found)}else callbacks.current.onCity?.(p.city)});
  m.on('click','dk-city-labels',e=>{const c=e.features?.[0]?.properties?.city;if(c)callbacks.current.onCity?.(c)});
  m.on('click','dk-labels',e=>{const id=e.features?.[0]?.properties?.id;const p=callbacks.current.places.find(p=>p.id===id);if(p)callbacks.current.onPlace?.(p)});
  for(const layer of ['dk-dots','dk-labels','dk-city-labels']){m.on('mouseenter',layer,()=>m.getCanvas().style.cursor='pointer');m.on('mouseleave',layer,()=>m.getCanvas().style.cursor='')};setReady(true)});
  m.on('error',()=>{if(live&&!m.isStyleLoaded())setFailed(true)});
  const resize=new ResizeObserver(()=>m.resize());resize.observe(host.current);return()=>{live=false;resize.disconnect();setReady(false);m.remove();map.current=null}},[]);
- useEffect(()=>{const m=map.current;if(!m||!ready)return;const groups=[...new Set(places.map(p=>p.city))].filter(c=>centers[c]);if(city&&centers[city]&&!groups.includes(city))groups.push(city);
- const pointFeatures:any[]=[],areas:any[]=[]; for(const c of groups){const ps=places.filter(p=>p.city===c),chosen=ps.filter(p=>selected.has(p.id)).length,[x,y]=centers[c];const active=chosen>0;const dx=c==='Tokyo'?.23:.10,dy=c==='Tokyo'?.13:.08;
- const perimeter=Array.from({length:49},(_,i)=>{const a=i/48*Math.PI*2;return [x+dx*Math.cos(a),y+dy*Math.sin(a)]});
+ useEffect(()=>{const m=map.current;if(!m||!ready)return;const groups=[...new Set(places.map(p=>p.city))].filter(c=>cityMapCenter(c,places));
+ const pointFeatures:any[]=[],areas:any[]=[]; for(const c of groups){const ps=places.filter(p=>p.city===c),chosen=ps.filter(p=>selected.has(p.id)).length,[x,y]=cityMapCenter(c,places)!;const active=chosen>0;
+ const perimeter=cityAreaPerimeter(c,ps.flatMap(p=>p.longitude!=null&&p.latitude!=null?[[p.longitude,p.latitude] as [number,number]]:[]),[x,y]);
  areas.push({type:'Feature',properties:{active},geometry:{type:'Polygon',coordinates:[perimeter]}});
  pointFeatures.push({type:'Feature',properties:{city:c,place:false,selected:active,label:`${c}\n${ps.length} saved`},geometry:{type:'Point',coordinates:[x,y]}});
  }
@@ -56,7 +80,7 @@ export function DesignMap({places,selected,city,onCity,onPlace,className='',rout
  // Saved-place grouping is not a travel sequence. Never draw a route from its order.
  (m.getSource('dk-route') as maplibregl.GeoJSONSource).setData(empty);
  },[ready,places,selected,city,route]);
- useEffect(()=>{if(!ready||!map.current)return;map.current.easeTo({center:city&&centers[city]?centers[city]:[137.5,35.8],zoom:city&&centers[city]?9.2:5.8,duration:400})},[city,ready]);
+ useEffect(()=>{if(!ready||!map.current)return;const center=city?cityMapCenter(city,callbacks.current.places):undefined;map.current.easeTo({center:center??[137.5,35.8],zoom:center?9.2:5.8,duration:400})},[city,ready]);
  useEffect(()=>{const m=map.current;if(!m||!ready||!palette)return;
  const tones={journey:{land:'#f7f5ef',water:'#b8dce3',accent:'#cb5745'},stone:{land:'#eeeae3',water:'#c8d1cc',accent:'#80624c'},sage:{land:'#e9ede3',water:'#bdcfc7',accent:'#557052'},sand:{land:'#f2e7d5',water:'#cad6ca',accent:'#a05a37'},original:{land:'#fafafa',water:'#cdd0d2',accent:'#2463eb'}};
  const tone=tones[palette];

@@ -32,6 +32,8 @@ public sealed class InlinePhotoTests
             {
                 Name = "Ginza",
                 City = "Tokyo",
+                Latitude = 35.68,
+                Longitude = 139.7,
                 Photo = new PhotoInput
                 {
                     Url = ImageUrl,
@@ -133,6 +135,8 @@ public sealed class InlinePhotoTests
                 Name = "Ginza",
                 City = "Tokyo",
                 Notes = "Keep this",
+                Latitude = 35.68,
+                Longitude = 139.7,
                 Photo = new PhotoInput { Url = ImageUrl, Caption = "Original" }
             });
         Assert.True(created.Success);
@@ -177,7 +181,7 @@ public sealed class InlinePhotoTests
             EditOperation.create,
             "place-a",
             initial.Version,
-            new PlaceChanges { Name = "Ginza", City = "Tokyo", Photo = new PhotoInput { Url = ImageUrl } });
+            new PlaceChanges { Name = "Ginza", City = "Tokyo", Latitude = 35.68, Longitude = 139.7, Photo = new PhotoInput { Url = ImageUrl } });
         Assert.True(created.Success);
 
         var stale = await tools.EditPlace(
@@ -207,7 +211,7 @@ public sealed class InlinePhotoTests
             EditOperation.create,
             "place-a",
             initial.Version,
-            new PlaceChanges { Name = "Ginza", City = "Tokyo", Photo = new PhotoInput { Url = ImageUrl } });
+            new PlaceChanges { Name = "Ginza", City = "Tokyo", Latitude = 35.68, Longitude = 139.7, Photo = new PhotoInput { Url = ImageUrl } });
         Assert.True(created.Success);
         var originalPhoto = Assert.IsType<PhotoDescriptor>(Assert.IsType<Place>(created.Item).Photo);
 
@@ -250,6 +254,8 @@ public sealed class InlinePhotoTests
                 Id = "duplicate",
                 Name = "First",
                 City = "Tokyo",
+                Latitude = 35.68,
+                Longitude = 139.7,
                 Photo = new PhotoDescriptor(Guid.Empty, ImageUrl, null, null, null, "place", null)
             },
             new Place
@@ -257,6 +263,8 @@ public sealed class InlinePhotoTests
                 Id = "duplicate",
                 Name = "Second",
                 City = "Kyoto",
+                Latitude = 35.69,
+                Longitude = 139.71,
                 Photo = new PhotoDescriptor(Guid.Empty, ReplacementUrl, null, null, null, "place", null)
             }
         ];

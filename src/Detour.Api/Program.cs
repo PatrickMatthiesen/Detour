@@ -20,6 +20,11 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<OwnerAccessor>();
 builder.Services.AddScoped<TripService>();
+builder.Services.AddHttpClient<GoogleMapsCoordinates>()
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false });
+builder.Services.AddHttpClient<GooglePlacesClient>()
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false });
+builder.Services.AddHostedService<GoogleLocationCleanupWorker>();
 builder.Services.AddScoped<TripItemEditor>();
 builder.Services.AddScoped<PlacePhotoService>();
 builder.Services.AddScoped<PhotoDownloader>();
@@ -239,7 +244,7 @@ var putTrip = app.MapPut("/api/trip", async (TripSnapshot request, TripService s
     {
         ReplaceResult.Success success => Results.Ok(success.Snapshot),
         ReplaceResult.Conflict conflict => Results.Conflict(conflict.Snapshot),
-            ReplaceResult.Invalid => Results.BadRequest(new { error = "invalid_trip" }),
+            ReplaceResult.Invalid invalid => Results.BadRequest(new { error = "invalid_trip", message = invalid.Message }),
             ReplaceResult.PhotoFailed failed => Results.BadRequest(new { error = "photo_import_failed", message = failed.Message }),
         _ => Results.BadRequest(new { error = "invalid_trip" })
     };

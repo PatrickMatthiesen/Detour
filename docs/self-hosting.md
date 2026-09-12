@@ -18,6 +18,7 @@ Configure the GitHub **Production** environment:
 | `GARAGE_RPC_SECRET`, `GARAGE_ADMIN_TOKEN`, `GARAGE_SECRET_ACCESS_KEY` | Three independent random 64-character hex secrets; retain across deployments |
 | `GARAGE_ACCESS_KEY_ID` | Stable S3 key ID: `GK` followed by 24 random hexadecimal characters |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google web OAuth client |
+| `GOOGLE_MAPS_API_KEY` | Optional backend API key for Google Places Text Search; restrict it to Places API (New) |
 | `OWNER_EMAIL` | Allowed Google account |
 
 | Variables | Value |
@@ -34,6 +35,32 @@ Configure the GitHub **Production** environment:
 3. Configure Google's callback as `https://detour.patrickbm.com/signin-google`.
 4. Run **Deploy Detour** from Actions, then point the hostname's Cloudflare Tunnel route to `http://<docker-vm-lan-ip>:48327` from the proxy VM. Do not put an interactive Cloudflare Access challenge in front of OAuth/MCP routes.
 5. Verify Google login, rejected users, OAuth discovery, and a ChatGPT read/write round trip. The workflow checks local HTTP health; external OAuth still needs this first-deployment check.
+
+## Google Maps coordinate lookup
+
+Detour reads coordinates directly from a Google Maps place URL whenever the URL
+contains them. A name-only `maps/search/?api=1&query=...` URL needs Google Places
+Text Search (New), so the deployment can resolve the place before saving it. The
+lookup sends the query to Google and keeps the place ID and coordinates in the
+application's short-lived coordinate cache. Detour does not create or modify
+anything in Google Maps.
+
+The Maps credential is separate from the Google sign-in OAuth client. Enable
+billing and Places API (New) in the same Google Cloud project if convenient, then
+create a backend API key restricted to Places API (New). Keep the key on the API
+server. The AppHost reads it as the optional Aspire secret parameter
+`Parameters__GoogleMapsApiKey` and injects it only as `GoogleMaps__ApiKey` into
+the API. The parameter always appears in the Aspire dashboard; its empty fallback
+keeps lookup disabled until a key is set. You can set it in the dashboard and save
+it to user secrets, then restart the API resource to apply it. Alternatively, set
+that environment variable for local Aspire runs, or add the key as
+the GitHub Production secret `GOOGLE_MAPS_API_KEY`. Do not put it in the frontend
+or in a ChatGPT OAuth client.
+
+Google's [pricing table](https://developers.google.com/maps/billing-and-pricing/pricing) currently lists 5,000 free monthly Text Search Pro requests, then $32 per
+1,000 requests. Restrict the key by server IP too if the server has a stable outbound IP. Set a daily quota in Google Cloud if you want a hard spending
+limit. Direct-coordinate links do not use this quota. Cached Places coordinates
+expire after 29 days and refresh on demand. This keeps the cache within the [Places API EEA storage limit](https://cloud.google.com/terms/maps-platform/eea/maps-service-terms).
 
 Production uses Compose project `detour` and persistent volumes derived from `detour-postgres-data` and `detour-garage-data`. Keep backups of the database, Garage volume and authentication keys. Do not delete volumes during updates. Production does not import the private development seed or legacy photo backup automatically. See [photo migration](photos.md).
 

@@ -46,6 +46,11 @@ public sealed class Place
     public string? GoogleMapsUrl { get; set; }
     public double? Latitude { get; set; }
     public double? Longitude { get; set; }
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public bool CoordinatesFromGoogle { get; set; }
+    // A one-shot request from the place editor, never stored with trip data.
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public bool ResolveCoordinates { get; set; }
     public int? DurationMinutes { get; set; }
     public string Priority { get; set; } = "nice";
     public string Status { get; set; } = "candidate";
@@ -148,6 +153,6 @@ public abstract record ReplaceResult
 {
     public sealed record Success(TripSnapshot Snapshot) : ReplaceResult;
     public sealed record Conflict(TripSnapshot Snapshot) : ReplaceResult;
-    public sealed record Invalid : ReplaceResult;
+    public sealed record Invalid(string? Message = null) : ReplaceResult;
     public sealed record PhotoFailed(string Message) : ReplaceResult;
 }

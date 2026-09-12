@@ -32,6 +32,13 @@ var api = builder.AddCSharpApp("api", "src/Detour.Api")
     .WaitFor(tripDb)
     .WithExternalHttpEndpoints();
 
+// Keep the optional key visible in the dashboard. The API treats an empty value
+// as unconfigured, so direct-coordinate links work without a Google API key.
+var googleMapsApiKey = builder.AddParameter("GoogleMapsApiKey",
+        () => builder.Configuration["Parameters:GoogleMapsApiKey"] ?? "", secret: true)
+    .WithDescription("Optional Places API (New) key for resolving name-only Google Maps links. Leave empty to disable lookup.");
+api.WithEnvironment("GoogleMaps__ApiKey", googleMapsApiKey);
+
 // The real-data seed is a local development convenience. It is deliberately not
 // copied into deployment artifacts, where this workstation path would be invalid.
 if (builder.ExecutionContext.IsRunMode)

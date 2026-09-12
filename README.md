@@ -74,7 +74,7 @@ Pop-Location
 
 The development seed is personal local data and is not included in the public repository. Place selection does not schedule an activity. City stays allocate time; confirmed hotel booking dates determine accommodation coverage. Unknown durations remain visible in daily capacity calculations. Packing and preparation tasks are editable manually and through the trip tools. Reminders are shown in the app; no push/email delivery runs in the background.
 
-Map markers for cities are explicitly approximate. Places without resolved coordinates remain in the list. Dashed area rings are illustrative planning regions, not city boundaries. Travel estimates are editable.
+Map markers for cities are explicitly approximate. Dashed area rings are illustrative planning regions, not city boundaries, and expand to enclose every resolved place in their city group. They keep an approximate default size when a group has no resolved coordinates, while places without coordinates remain in the list. Travel estimates are editable.
 
 The working app opens at `/` (Places), `/plan` (daily planning and whole-trip calendar), and `/preparation` (checklist and packing). Plan includes city-route, journey and booking editors, compact place details and a full-size photo viewer. Prepare supports task due dates and in-app reminders, plus category- and bag-filtered packing. The approved design preview remains at `/4`; numbered routes are experiments.
 

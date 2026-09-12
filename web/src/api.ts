@@ -47,12 +47,16 @@ export async function saveTrip(snapshot: TripSnapshot): Promise<TripSnapshot> {
     },
     body: JSON.stringify(snapshot),
   });
-  if (!response.ok)
+  if (!response.ok) {
+    const failure = response.status === 400
+      ? await response.json().catch(() => null) as { message?: string } | null
+      : null;
     throw new Error(
       response.status === 409
         ? "Another change was saved. Refresh to see it before editing."
-        : `Trip API returned ${response.status}`,
+        : failure?.message || `Trip API returned ${response.status}`,
     );
+  }
   return response.json() as Promise<TripSnapshot>;
 }
 
