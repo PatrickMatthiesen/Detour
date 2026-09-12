@@ -11,12 +11,10 @@ Prerequisites:
 - Docker Desktop running
 - Bun for frontend dependencies, builds, and tests
 - Node.js/npm (currently used by Aspire to launch the Vite development server)
-- PowerShell 7 (`pwsh`) for the package restore script, including on Linux/macOS
 
 Start the full development graph from the repository root:
 
 ```powershell
-./scripts/restore-garage.ps1
 aspire start --non-interactive
 aspire describe --format Json --non-interactive
 ```
@@ -82,6 +80,6 @@ The working app opens at `/` (Places), `/plan` (daily planning and whole-trip ca
 
 Place photos live in a private Garage bucket, not in this repository or the frontend deployment. Each place can have one photo with its source, author, caption and license. The API authenticates photo requests; it does not expose Garage credentials or public object URLs. Neighbourhood and illustrative photos are labelled, and unavailable photos show a placeholder.
 
-The [Garage integration](https://github.com/PatrickMatthiesen/Aspire.Hosting.Garage) is restored by `scripts/restore-garage.ps1` from a checksum-pinned GitHub release. CI and deployment use the same script. The provisioner image is pinned by digest.
+The [Garage integration](https://www.nuget.org/packages/Subjective.Aspire.Hosting.Garage/) restores from NuGet.org through the normal Aspire build. The provisioner image is pinned by digest.
 
 See [photo imports and migration](docs/photos.md) for agent tools and importing existing pictures.

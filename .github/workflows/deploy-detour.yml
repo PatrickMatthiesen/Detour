@@ -88,9 +88,6 @@ jobs:
       - name: Restore frontend dependencies
         working-directory: web
         run: bun install --frozen-lockfile
-      - name: Restore Garage integration
-        shell: pwsh
-        run: ./scripts/restore-garage.ps1
       - name: Connect to Tailscale
         uses: tailscale/github-action@v4
         with:

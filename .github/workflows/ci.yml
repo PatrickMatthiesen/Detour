@@ -30,9 +30,6 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.1
-      - name: Restore Garage integration
-        shell: pwsh
-        run: ./scripts/restore-garage.ps1
       - name: Backend tests with isolated PostgreSQL schemas
         env:
           TRIPADVISOR_TEST_CONNECTION: Host=localhost;Port=5432;Username=postgres;Password=ci-only-password;Database=postgres
