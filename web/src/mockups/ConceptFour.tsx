@@ -1,8 +1,11 @@
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type CSSProperties, type ReactNode, useEffect, useMemo, useState } from "react";
 import {
   Check,
   Clock3,
   ExternalLink,
+  Hotel,
+  Plane,
+  TrainFront,
   Search,
   X,
 } from "lucide-react";
@@ -15,6 +18,7 @@ import {
   useDesignTrip,
 } from "./design-kit";
 import type { Place, TripSnapshot } from "../types";
+import { buildRouteStops, summarizeCityStops, STATUS_COLORS } from "./route-status";
 import "./four.css";
 
 const CITIES = ["Tokyo", "Kyoto", "Osaka"];
@@ -31,22 +35,28 @@ function placeFullDescription(place: Place) {
   return place.description || place.notes || "Saved place awaiting research.";
 }
 
-function cityStayStrip(trip: ReturnType<typeof useDesignTrip>["trip"]) {
-  if (!trip) return [];
-  const stops: { city: string; checkIn: string; checkOut: string }[] = [];
-  for (const stay of [...trip.stays].sort((a,b)=>a.checkIn.localeCompare(b.checkIn))) {
-    const last = stops.at(-1);
-    if (last && last.city === stay.city) {
-      last.checkOut = stay.checkOut;
-      continue;
-    }
-    stops.push({
-      city: stay.city,
-      checkIn: stay.checkIn,
-      checkOut: stay.checkOut,
-    });
-  }
-  return stops;
+const statusVariables = Object.fromEntries(Object.entries(STATUS_COLORS).map(([status,color])=>[`--status-${status}`,color])) as CSSProperties;
+function stayDate(value:string) {
+  try { return shortDate(value); } catch { return "Date needed"; }
+}
+
+function TransportBookings({trip}:{trip:TripSnapshot|null}) {
+  const groups = [
+    {label:"Flights",icon:Plane,kinds:["flight"]},
+    {label:"Other transport",icon:TrainFront,kinds:["transport","train","rail","bus","ferry"]},
+  ];
+  return <details className="d4-transport-bookings">
+    <summary><TrainFront size={13} aria-hidden="true"/>Transport bookings</summary>
+    <div className="d4-transport-summary">
+      {groups.map(({label,icon:Icon,kinds})=>{
+        const bookings=trip?.bookings.filter(b=>kinds.includes(b.kind.trim().toLowerCase())&&!['cancelled','canceled'].includes(b.status.trim().toLowerCase()))??[];
+        const confirmed=bookings.filter(b=>b.status.trim().toLowerCase()==='confirmed').length;
+        const status=!bookings.length?'saved':confirmed===bookings.length?'booked':confirmed?'partial':'picked';
+        return <div key={label} data-status={status}><Icon size={14} aria-hidden="true"/><span>{label}: {bookings.length?`${confirmed} confirmed${bookings.length-confirmed?`, ${bookings.length-confirmed} unconfirmed`:''}`:'no bookings recorded'}</span></div>;
+      })}
+      <p>Recorded bookings only. Accommodation status does not include transport.</p>
+    </div>
+  </details>;
 }
 
 export default function ConceptFour() {
@@ -100,7 +110,8 @@ export function PlacesExplorer({trip, selected, toggle, loading, error, header, 
     });
   }, [category, cityPlacesList, query, selected, selectedOnly]);
   const focused = trip?.places.find((place) => place.id === focusedId) || null;
-  const stays = cityStayStrip(trip);
+  const stays = useMemo(() => buildRouteStops(trip), [trip]);
+  const cityStatuses = useMemo(() => summarizeCityStops(stays), [stays]);
 
   const changeCity = (nextCity: string) => {
     setCity(nextCity);
@@ -126,7 +137,7 @@ export function PlacesExplorer({trip, selected, toggle, loading, error, header, 
   }, [focusedId]);
 
   return (
-    <div className="new-preview d4-page" data-palette="journey">
+    <div className="new-preview d4-page" data-palette="journey" style={statusVariables}>
       {header ?? <PreviewNav active={4} />}
 
       <div className="d4-workspace">
@@ -247,6 +258,8 @@ export function PlacesExplorer({trip, selected, toggle, loading, error, header, 
             onCity={changeCity}
             onPlace={(place) => setFocusedId(place.id)}
             className="d4-map"
+            routeStops={stays}
+            cityStatuses={cityStatuses}
             palette="journey"
             showInformation={false}
           />
@@ -308,6 +321,7 @@ export function PlacesExplorer({trip, selected, toggle, loading, error, header, 
         <div className="d4-stays-label">
           <strong>Route</strong>
         </div>
+        <div className="d4-route-heading"><span><Hotel size={13} aria-hidden="true"/>Accommodation by stay</span><TransportBookings trip={trip}/></div>
         <div className="d4-stays-list">
           {stays.length ? (
             stays.map((stay, index) => (
@@ -316,13 +330,17 @@ export function PlacesExplorer({trip, selected, toggle, loading, error, header, 
                 onClick={() => changeCity(stay.city)}
                 aria-pressed={city === stay.city}
                 className="d4-stay"
+                data-status={stay.status}
+                title={`${stay.city}: ${stay.detail}`}
+                aria-label={`${stay.city}, ${stayDate(stay.checkIn)} to ${stayDate(stay.checkOut)}, accommodation ${stay.label.toLowerCase()}, ${stay.detail}`}
                 key={`${stay.city}-${stay.checkIn}-${index}`}
               >
                 <span>
                   <strong>{stay.city}</strong>
                   <small>
-                    {shortDate(stay.checkIn)} – {shortDate(stay.checkOut)}
+                    {stayDate(stay.checkIn)} – {stayDate(stay.checkOut)}
                   </small>
+                  <small className="d4-stay-status"><Hotel size={12} aria-hidden="true"/>{stay.label}</small>
                 </span>
               </button>
             ))

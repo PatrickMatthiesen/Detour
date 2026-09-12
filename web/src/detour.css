@@ -2,6 +2,7 @@
 .detour-app {font-family:Lato,system-ui,sans-serif;color:#30383b;background:#f7f8f3;min-height:100vh;}
 .detour-nav {height:58px;display:flex;align-items:center;gap:24px;padding:0 20px;background:#fffdf8;border-bottom:1px solid #e5e3dc;}
 .detour-brand {display:flex;align-items:center;gap:8px;color:#b7493b!important;font-weight:800;font-size:18px;text-decoration:none;}
+.detour-icon {display:inline-block;flex-shrink:0;object-fit:contain;border-radius:22%;vertical-align:middle;}
 .detour-trip {font-size:13px;display:flex;gap:12px;align-items:center;}
 .detour-trip small {font-size:12px;color:#747b7b;}
 .detour-nav nav {display:flex;flex-direction:row;gap:5px;margin-left:auto;}
