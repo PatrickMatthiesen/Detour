@@ -96,7 +96,7 @@ public sealed class TripMcpTools(TripService service, TripItemEditor editor)
         => Edit("activities", operation, id, expectedVersion, changes, clearFields, cancellationToken);
 
     [McpServerTool(ReadOnly = false, Destructive = true, OpenWorld = false, Idempotent = true, UseStructuredContent = true)]
-    [Description("Planned city stay. Required on create: city, checkIn, checkOut. Dates are YYYY-MM-DD; checkout is exclusive. This is a route plan, not a hotel booking. Create, update or delete only this record. Omitted fields are preserved. Read first; on conflict re-read and reassess instead of blindly retrying. Reuse the same ID when retrying a create; never generate a second ID after an uncertain response.")]
+    [Description("Planned city stay. Required on create: city, checkIn, checkOut. Dates are YYYY-MM-DD; checkout is exclusive. City must identify one mapped city or city area; put extra destinations in name or notes. An unknown city needs a saved place with matching city text and valid coordinates first. This is a route plan, not a hotel booking. Create, update or delete only this record. Omitted fields are preserved. Read first; on conflict re-read and reassess instead of blindly retrying. Reuse the same ID when retrying a create; never generate a second ID after an uncertain response.")]
     public Task<ItemEditResult> EditStay(
         EditOperation operation,
         [Description("Existing record ID for update/delete; new stable unique ID for create. Never update by name.")] string id,

@@ -18,6 +18,8 @@ import {
   useDesignTrip,
 } from "./design-kit";
 import type { Place, TripSnapshot } from "../types";
+import PlaceDetails from "../plan/PlaceDetails";
+import { useCardPosition } from "./use-card-position";
 import { buildRouteStops, summarizeCityStops, STATUS_COLORS } from "./route-status";
 import "./four.css";
 
@@ -70,6 +72,7 @@ export function PlacesExplorer({trip, selected, toggle, loading, error, header, 
   const [selectedOnly, setSelectedOnly] = useState(false);
   const [query, setQuery] = useState("");
   const [focusedId, setFocusedId] = useState<string | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const cityList = useMemo(() => {
     if (!trip) return [];
     const cities = new Set(trip.places.map((place) => place.city).filter(Boolean));
@@ -110,6 +113,7 @@ export function PlacesExplorer({trip, selected, toggle, loading, error, header, 
     });
   }, [category, cityPlacesList, query, selected, selectedOnly]);
   const focused = trip?.places.find((place) => place.id === focusedId) || null;
+  const cardPosition = useCardPosition(!!focused);
   const stays = useMemo(() => buildRouteStops(trip), [trip]);
   const cityStatuses = useMemo(() => summarizeCityStops(stays), [stays]);
 
@@ -130,6 +134,7 @@ export function PlacesExplorer({trip, selected, toggle, loading, error, header, 
   useEffect(() => {
     if (!focusedId) return;
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.target instanceof Element && event.target.closest("dialog")) return;
       if (event.key === "Escape") setFocusedId(null);
     };
     window.addEventListener("keydown", onKeyDown);
@@ -137,7 +142,7 @@ export function PlacesExplorer({trip, selected, toggle, loading, error, header, 
   }, [focusedId]);
 
   return (
-    <div className="new-preview d4-page" data-palette="journey" style={statusVariables}>
+    <><div className="new-preview d4-page" data-palette="journey" style={statusVariables}>
       {header ?? <PreviewNav active={4} />}
 
       <div className="d4-workspace">
@@ -250,7 +255,7 @@ export function PlacesExplorer({trip, selected, toggle, loading, error, header, 
           )}
         </aside>
 
-        <main className="d4-map-area">
+        <main className="d4-map-area" ref={cardPosition.areaRef}>
           <DesignMap
             places={trip?.places || []}
             selected={selected}
@@ -264,16 +269,21 @@ export function PlacesExplorer({trip, selected, toggle, loading, error, header, 
             showInformation={false}
           />
           {focused && (
-            <aside className="d4-map-inspector" role="dialog" aria-label="Place details">
+            <aside className="d4-map-inspector" role="dialog" aria-label="Place preview" ref={cardPosition.cardRef} style={cardPosition.style}>
               <button
                 type="button"
                 className="d4-inspector-close"
                 onClick={() => setFocusedId(null)}
-                aria-label="Close place details"
+                aria-label="Close place preview"
               >
                 <X size={16} />
               </button>
-              <PlacePhoto place={focused} className="d4-inspector-photo" />
+              <div className="d4-inspector-image">
+                <PlacePhoto place={focused} className="d4-inspector-photo" />
+                <button type="button" className="d4-inspector-drag" aria-label="Move place card"
+                  title="Drag photo to move. Use arrow keys when focused; Home to reset."
+                  data-dragging={cardPosition.dragging} {...cardPosition.handle} />
+              </div>
               <div className="d4-inspector-content">
                 <span className="d4-inspector-area">{focused.area || focused.city}</span>
                 <h2>{focused.name}</h2>
@@ -288,11 +298,23 @@ export function PlacesExplorer({trip, selected, toggle, loading, error, header, 
                       ? `${focused.durationMinutes} min`
                       : focused.durationText || "Time unknown"}
                   </span>
+                  <nav className="d4-inspector-sources" aria-label="Place sources">
+                    {[
+                      [focused.sourceUrl, "Source"],
+                      [focused.googleMapsUrl, "Maps"],
+                      [focused.instagramUrl, "Instagram"],
+                    ].map(([url, label]) => url && (
+                      <a key={label} href={url} target="_blank" rel="noreferrer">
+                        {label} <ExternalLink size={12} />
+                      </a>
+                    ))}
+                  </nav>
                   {focused.reservation && <span>Reservation: {focused.reservation}</span>}
                   {focused.openingHours && <span>{focused.openingHours}</span>}
                 </div>
                 <div className="d4-inspector-actions">
-                  {onEdit && <button className="d4-edit-place" onClick={() => onEdit(focused)}>Edit place</button>}
+                  <button type="button" className="d4-view-details" onClick={() => setDetailsOpen(true)}>Details</button>
+                  {onEdit && <button className="d4-edit-place" onClick={() => onEdit(focused)}>Edit</button>}
                   <button
                     type="button"
                     className={`d4-inspector-select${selected.has(focused.id) ? " is-selected" : ""}`}
@@ -301,15 +323,6 @@ export function PlacesExplorer({trip, selected, toggle, loading, error, header, 
                   >
                     {selected.has(focused.id) ? <><Check size={14} /> Chosen</> : "Choose for trip"}
                   </button>
-                  {[
-                    [focused.sourceUrl, "Source"],
-                    [focused.googleMapsUrl, "Maps"],
-                    [focused.instagramUrl, "Instagram"],
-                  ].map(([url, label]) => url && (
-                    <a key={label} href={url} target="_blank" rel="noreferrer">
-                      {label} <ExternalLink size={12} />
-                    </a>
-                  ))}
                 </div>
               </div>
             </aside>
@@ -350,5 +363,12 @@ export function PlacesExplorer({trip, selected, toggle, loading, error, header, 
         </div>
       </footer>
     </div>
+    {detailsOpen && focused && <PlaceDetails
+      key={focused.id}
+      place={{...focused, selected:selected.has(focused.id)}}
+      onClose={() => setDetailsOpen(false)}
+      onEdit={onEdit ? () => {setDetailsOpen(false); onEdit(focused);} : undefined}
+    />}
+    </>
   );
 }

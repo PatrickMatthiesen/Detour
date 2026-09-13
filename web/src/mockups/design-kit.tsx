@@ -4,6 +4,8 @@ import type {FeatureCollection,LineString} from 'geojson';
 import {Compass} from 'lucide-react';
 import {getTrip} from '../api';
 import type {Place,TripSnapshot} from '../types';
+import {centers, cityMapCenter, unresolvedRouteCities} from '../plan/city-location';
+export {cityMapCenter} from '../plan/city-location';
 import {STATUS_COLORS, type summarizeCityStops} from './route-status';
 import PlacePhoto from '../photos/PlacePhoto';
 import {photoFor} from '../photos/place-photo';
@@ -26,17 +28,6 @@ export function useDesignTrip(){
 export function cityPlaces(trip:TripSnapshot|null,city:string){return trip?.places.filter(p=>!city||city==='All'||city==='All cities'||p.city===city)??[]}
 export function shortDate(date:string){return new Intl.DateTimeFormat('en-GB',{day:'numeric',month:'short',timeZone:'UTC'}).format(new Date(date.slice(0,10)+'T12:00:00Z'))}
 export function PreviewNav({active}:{active:number}){return <header className="dk-nav"><a href="/" className="dk-trip"><Compass size={19}/><strong>Japan 2026</strong><span>30 Sep – 25 Oct</span></a><nav aria-label="Design alternatives">{designNames.map((n,i)=><a key={n} href={'/'+(i+4)} className={active===i+4?'dk-active':''} title={n}>{i+4}<span>{n}</span></a>)}</nav><span className="dk-preview" title="Your saved trip is unchanged. Reload to reset this preview.">Preview only</span></header>}
-const centers:Record<string,[number,number]>={Tokyo:[139.7,35.68],Kyoto:[135.768,35.012],Osaka:[135.502,34.694],Nagoya:[136.907,35.181],Hakone:[139.025,35.232],Yokohama:[139.638,35.444],Nagano:[138.181,36.648],Fukui:[136.222,36.064],Gifu:[136.76,35.423],Hiroshima:[132.455,34.385],Kurashiki:[133.77,34.585],Onomichi:[133.205,34.408],'Kinosaki Onsen':[134.812,35.624],Nikko:[139.698,36.72]};
-/** Approximate group anchor, never a substitute for a place's coordinates. */
-export function cityMapCenter(city:string,places:Place[]):[number,number]|undefined {
- if(city==='Nikkō')return centers.Nikko;
- if(centers[city])return centers[city];
- if(['other','unknown city',''].includes(city.trim().toLowerCase()))return undefined;
- const points=places.filter(p=>p.city===city&&p.longitude!=null&&p.latitude!=null&&Number.isFinite(p.longitude)&&Number.isFinite(p.latitude)&&Math.abs(p.longitude)<=180&&Math.abs(p.latitude)<=90);
- if(!points.length)return undefined;
- // Anchor to a resolved member so a dispersed group is never placed in empty space.
- return [points[0].longitude!,points[0].latitude!];
-}
 const defaultAreaRadius=(city:string):[number,number]=>city==='Tokyo'?[.23,.13]:[.10,.08];
 /** Return an ellipse perimeter that contains every resolved place in a city. */
 export function cityAreaPerimeter(city:string,points:Array<[number,number]>,center=centers[city]):Array<[number,number]> {
@@ -176,6 +167,7 @@ export function DesignMap({places,selected,city,onCity,onPlace,className='',rout
  for(const layer of m.getStyle().layers){if(layer.type==='background')paint(layer.id,'background-color',tone.land);else if(layer.type==='fill'&&'source-layer' in layer&&layer['source-layer']==='water')paint(layer.id,'fill-color',tone.water);else if(palette==='journey'&&layer.type==='fill'&&'source-layer' in layer&&layer['source-layer']==='park')paint(layer.id,'fill-color','#d4e4c3')}
 
  },[ready,palette]);
+ const unresolvedCities=unresolvedRouteCities(routeStops,places);
  const shown=places.filter(p=>!city||p.city===city),unknown=shown.filter(p=>p.latitude==null||p.longitude==null).length;
- return <div className={'dk-map '+className}><div ref={host} className="dk-map-canvas"/>{failed&&!ready&&<div className="dk-map-error">Map unavailable. You can still browse and select places.</div>}{showInformation&&<details className="dk-map-key"><summary><span className="dk-key-dot"/>Map information</summary><p>Dashed shapes are illustrative planning areas, not city boundaries. Their geographic size stays fixed as you zoom.</p><p>{unknown} places in this view still need exact coordinates. City counts include them.</p>{(route||routeStops.length>1)&&<p>Arrows show planned city order. Curves are illustrative, not transport paths.</p>}</details>}{!showInformation&&<details className="dk-map-key dk-status-key"><summary>Map key</summary><ul>{([['saved','Saved idea'],['picked','Picked / not booked'],['partial','Partly booked'],['booked','Booked']] as const).map(([status,label])=><li key={status}><span style={{background:STATUS_COLORS[status]}} aria-hidden="true"/>{label}</li>)}</ul><p>City booking status covers accommodation across all stays.</p><p>Blue arrows show city order, not transport paths.</p></details>}</div>
+ return <div className={'dk-map '+className}><div ref={host} className="dk-map-canvas"/>{!!unresolvedCities.length&&<p className="dk-route-warning" role="status">Route incomplete: cannot locate {unresolvedCities.join(", ")}. Edit these stays to use one mapped city or city area.</p>}{failed&&!ready&&<div className="dk-map-error">Map unavailable. You can still browse and select places.</div>}{showInformation&&<details className="dk-map-key"><summary><span className="dk-key-dot"/>Map information</summary><p>Dashed shapes are illustrative planning areas, not city boundaries. Their geographic size stays fixed as you zoom.</p><p>{unknown} places in this view still need exact coordinates. City counts include them.</p>{(route||routeStops.length>1)&&<p>Arrows show planned city order. Curves are illustrative, not transport paths.</p>}</details>}{!showInformation&&<details className="dk-map-key dk-status-key"><summary>Map key</summary><ul>{([['saved','Saved idea'],['picked','Picked / not booked'],['partial','Partly booked'],['booked','Booked']] as const).map(([status,label])=><li key={status}><span style={{background:STATUS_COLORS[status]}} aria-hidden="true"/>{label}</li>)}</ul><p>City booking status covers accommodation across all stays.</p><p>Blue arrows show city order, not transport paths.</p></details>}</div>
 }

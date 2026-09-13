@@ -447,14 +447,32 @@
   border: 1px solid #d7e0ed;
   border-radius: 9px;
   box-shadow: 0 10px 28px rgba(21, 45, 81, 0.18);
-  max-height: calc(100% - 94px);
+  max-height: calc(100% - 32px);
   overflow: auto;
   position: absolute;
-  right: 16px;
-  top: 76px;
+  left: var(--card-x, 16px);
+  top: var(--card-y, 16px);
   width: min(350px, calc(100% - 32px));
   z-index: 3;
 }
+.d4-inspector-image { position: relative; }
+.d4-inspector-image figcaption { pointer-events: none; }
+.d4-inspector-image .dk-credit { z-index: 2; pointer-events: auto; }
+.d4-inspector-drag {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  touch-action: none;
+  user-select: none;
+}
+.d4-page .d4-inspector-drag { cursor: grab; }
+.d4-page .d4-inspector-drag[data-dragging="true"] { cursor: grabbing; }
+@media (max-width: 640px) { .d4-inspector-drag { display: none; } }
 .d4-inspector-close {
   align-items: center;
   background: rgba(255, 255, 255, 0.92);
@@ -469,7 +487,7 @@
   right: 9px;
   top: 9px;
   width: 28px;
-  z-index: 1;
+  z-index: 3;
 }
 .d4-inspector-close:hover {
   color: var(--d4-ink);
@@ -533,6 +551,14 @@
   gap: 8px;
   margin-top: 13px;
 }
+.d4-view-details {
+  background: #fff;
+  border: 1px solid var(--d4-line);
+  border-radius: 5px;
+  color: var(--d4-ink);
+  font-size: 12px;
+  padding: 8px 10px;
+}
 .d4-inspector-select {
   align-items: center;
   background: var(--d4-blue);
@@ -550,7 +576,16 @@
   background: #174bbd;
   border-color: #174bbd;
 }
-.d4-inspector-actions a {
+.d4-inspector-sources {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+.d4-inspector-sources:empty { display: none; }
+.d4-inspector-sources a {
   align-items: center;
   color: var(--d4-blue);
   display: inline-flex;
@@ -558,7 +593,7 @@
   gap: 3px;
   font-weight: 700;
 }
-.d4-inspector-actions a:hover {
+.d4-inspector-sources a:hover {
   text-decoration: underline;
 }
 .d4-map-caption {

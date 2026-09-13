@@ -16,18 +16,22 @@ function detailContent(place:Place) {
  }
  const value=(key:string)=>fields.get(key)?.join("; ");
  const combine=(...values:(string|null|undefined)[])=>[...new Set(values.filter((v):v is string=>!!v?.trim()).map(v=>v.trim()))].join(" · ");
- const estimate=value("estimated duration")||place.durationText;
+ const estimate=place.durationText||value("estimated duration");
  const facts:[string,string][]=[];
  const duration=combine(estimate,place.durationMinutes ? `${place.durationMinutes} min in plan` : null);
  if(duration)facts.push(["Visit",duration]);
- const reservation=combine(place.reservation,value("reservation"));
+ const reservation=place.reservation||value("reservation");
  if(reservation)facts.push(["Reservations",reservation]);
  if(place.openingHours)facts.push(["Opening hours",place.openingHours]);
+ if(place.priority)facts.push(["Priority",{required:"Must visit",high:"High",nice:"Nice to visit",none:"None"}[place.priority]]);
+ if(place.status)facts.push(["Status",place.status]);
+ if(place.selected!=null)facts.push(["Chosen for trip",place.selected?"Yes":"No"]);
+ if(place.latitude!=null||place.longitude!=null)facts.push(["Coordinates",`Latitude: ${place.latitude??"Unknown"}; longitude: ${place.longitude??"Unknown"}`]);
  if(value("best time"))facts.push(["When to go",value("best time")!]);
  const location=value("location");
  if(location && location!==place.name)facts.push(["Location",location]);
  const research=value("needs research");
- const needsResearch=place.needsResearch||/^(yes|true)$/i.test(research||"");
+ const needsResearch=place.needsResearch??/^(yes|true)$/i.test(research||"");
  if(research&&!/^(yes|true|no|false)$/i.test(research))notes.push(`Needs research: ${research}`);
  return {facts,notes,needsResearch};
 }
@@ -45,14 +49,14 @@ function PhotoViewer({place,onClose}:{place:Place;onClose:()=>void}) {
  </dialog>;
 }
 
-export default function PlaceDetails({place,scheduled,onAdd,onClose}:{place:Place;scheduled:boolean;onAdd:()=>void;onClose:()=>void}){
+export default function PlaceDetails({place,scheduled=false,onAdd,onEdit,onClose}:{place:Place;scheduled?:boolean;onAdd?:()=>void;onEdit?:()=>void;onClose:()=>void}){
  const dialog=useRef<HTMLDialogElement>(null);
  const [photoOpen,setPhotoOpen]=useState(false);
  useEffect(()=>{dialog.current?.showModal()},[]);
  const {facts,notes,needsResearch}=detailContent(place);
  const links=[["Source",place.sourceUrl],["Google Maps",place.googleMapsUrl],["Instagram",place.instagramUrl]].filter(([,url])=>{try{return !!url&&["http:","https:"].includes(new URL(url).protocol)}catch{return false}});
  const hasPhoto=!!photoFor(place).photo?.url;
- return <dialog ref={dialog} className="place-details" onCancel={onClose} aria-labelledby="place-details-title">
+ return <dialog ref={dialog} className="place-details" onCancel={e=>{e.stopPropagation();onClose()}} aria-labelledby="place-details-title">
   <header><div><h2 id="place-details-title">{place.name}</h2><p className="place-details-location">{[place.city,place.area,place.category].filter(Boolean).join(" · ")}</p></div><button aria-label="Close place details" onClick={onClose}><X size={20}/></button></header>
   <div className="place-details-body">
    <div className={`place-details-intro${hasPhoto ? " has-photo" : ""}`}>
@@ -63,7 +67,7 @@ export default function PlaceDetails({place,scheduled,onAdd,onClose}:{place:Plac
    {!!notes.length&&<section className="place-details-notes"><h3>Planning notes</h3>{notes.map((note,index)=><p key={index}>{note}</p>)}</section>}
    {!!links.length&&<nav aria-label="Place sources">{links.map(([label,url])=><a key={label} href={url!} target="_blank" rel="noreferrer">{label}<ExternalLink size={13}/></a>)}</nav>}
   </div>
-  <footer><button onClick={onClose}>Close</button><button className="place-details-add" disabled={scheduled} onClick={onAdd}>{scheduled?<Check size={16}/>:<Plus size={16}/>} {scheduled?"On this day":"Add to this day"}</button></footer>
+  <footer><button onClick={onClose}>Close</button>{onEdit&&<button className="place-details-add" onClick={onEdit}>Edit place</button>}{onAdd&&<button className="place-details-add" disabled={scheduled} onClick={onAdd}>{scheduled?<Check size={16}/>:<Plus size={16}/>} {scheduled?"On this day":"Add to this day"}</button>}</footer>
  {photoOpen&&<PhotoViewer place={place} onClose={()=>setPhotoOpen(false)}/>}
  </dialog>;
 }
