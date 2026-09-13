@@ -355,9 +355,10 @@
 }
 .d4-card-check {
   align-items: center;
-  background: #fff;
-  border: 1px solid #b9c3d0;
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(185, 195, 208, 0.78);
   border-radius: 50%;
+  backdrop-filter: blur(2px);
   color: #fff;
   display: flex;
   height: 23px;

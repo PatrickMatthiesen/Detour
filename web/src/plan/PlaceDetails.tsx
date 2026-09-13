@@ -49,16 +49,26 @@ function PhotoViewer({place,onClose}:{place:Place;onClose:()=>void}) {
  </dialog>;
 }
 
-export default function PlaceDetails({place,scheduled=false,onAdd,onEdit,onClose}:{place:Place;scheduled?:boolean;onAdd?:()=>void;onEdit?:()=>void;onClose:()=>void}){
+export interface PlaceDetailsProps {
+ place:Place;
+ scheduled?:boolean;
+ onAdd?:()=>void;
+ onEdit?:()=>void;
+ onClose:()=>void;
+ embedded?:boolean;
+ onToggleTrip?:()=>void;
+}
+
+export default function PlaceDetails({place,scheduled=false,onAdd,onEdit,onClose,embedded=false,onToggleTrip}:PlaceDetailsProps){
  const dialog=useRef<HTMLDialogElement>(null);
  const [photoOpen,setPhotoOpen]=useState(false);
- useEffect(()=>{dialog.current?.showModal()},[]);
+ useEffect(()=>{if(!embedded)dialog.current?.showModal()},[embedded]);
  const {facts,notes,needsResearch}=detailContent(place);
  const links=[["Source",place.sourceUrl],["Google Maps",place.googleMapsUrl],["Instagram",place.instagramUrl]].filter(([,url])=>{try{return !!url&&["http:","https:"].includes(new URL(url).protocol)}catch{return false}});
  const hasPhoto=!!photoFor(place).photo?.url;
- return <dialog ref={dialog} className="place-details" onCancel={e=>{e.stopPropagation();onClose()}} aria-labelledby="place-details-title">
-  <header><div><h2 id="place-details-title">{place.name}</h2><p className="place-details-location">{[place.city,place.area,place.category].filter(Boolean).join(" · ")}</p></div><button aria-label="Close place details" onClick={onClose}><X size={20}/></button></header>
+ const content=<>
   <div className="place-details-body">
+   {embedded && (place.latitude == null || place.longitude == null) && <p className="place-location-missing">This place does not have a map pin yet.</p>}
    <div className={`place-details-intro${hasPhoto ? " has-photo" : ""}`}>
     {hasPhoto&&<div className="place-photo-trigger"><PlacePhoto place={place} className="place-details-photo"/><button type="button" className="place-photo-open" aria-label={`Enlarge photo of ${place.name}`} onClick={()=>setPhotoOpen(true)}/></div>}
     <div>{place.description&&<p>{place.description}</p>}{needsResearch&&<span className="place-details-research">Needs checking</span>}</div>
@@ -67,7 +77,20 @@ export default function PlaceDetails({place,scheduled=false,onAdd,onEdit,onClose
    {!!notes.length&&<section className="place-details-notes"><h3>Planning notes</h3>{notes.map((note,index)=><p key={index}>{note}</p>)}</section>}
    {!!links.length&&<nav aria-label="Place sources">{links.map(([label,url])=><a key={label} href={url!} target="_blank" rel="noreferrer">{label}<ExternalLink size={13}/></a>)}</nav>}
   </div>
+  {photoOpen&&<PhotoViewer place={place} onClose={()=>setPhotoOpen(false)}/>}
+ </>;
+ if(embedded) return <section className="place-details place-details-embedded" aria-labelledby="place-details-title">
+  <header>
+   <button type="button" className="place-details-back" aria-label="Back to places" onClick={onClose}><span aria-hidden="true">←</span> Back to places</button>
+   {onEdit&&<button type="button" className="place-details-edit" onClick={onEdit}>Edit place</button>}
+  </header>
+  <div className="place-details-embedded-heading"><h2 id="place-details-title">{place.name}</h2><p className="place-details-location">{[place.city,place.area,place.category].filter(Boolean).join(" · ")}</p></div>
+  {content}
+  {onToggleTrip&&<footer className="place-details-trip-actions">{place.selected?<><span className="place-details-trip-status"><Check size={16}/> Added to trip</span><button type="button" onClick={onToggleTrip}>Remove from trip</button></>:<button type="button" className="place-details-add" onClick={onToggleTrip}><Plus size={16}/> Add to trip</button>}</footer>}
+ </section>;
+ return <dialog ref={dialog} className="place-details" onCancel={e=>{e.stopPropagation();onClose()}} aria-labelledby="place-details-title">
+  <header><div><h2 id="place-details-title">{place.name}</h2><p className="place-details-location">{[place.city,place.area,place.category].filter(Boolean).join(" · ")}</p></div><button aria-label="Close place details" onClick={onClose}><X size={20}/></button></header>
+  {content}
   <footer><button onClick={onClose}>Close</button>{onEdit&&<button className="place-details-add" onClick={onEdit}>Edit place</button>}{onAdd&&<button className="place-details-add" disabled={scheduled} onClick={onAdd}>{scheduled?<Check size={16}/>:<Plus size={16}/>} {scheduled?"On this day":"Add to this day"}</button>}</footer>
- {photoOpen&&<PhotoViewer place={place} onClose={()=>setPhotoOpen(false)}/>}
  </dialog>;
 }
