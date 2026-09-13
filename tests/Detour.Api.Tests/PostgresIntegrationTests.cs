@@ -164,6 +164,34 @@ public sealed class PostgresIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Early_version_conflict_refreshes_a_preloaded_service_tracker()
+    {
+        if (!HasDatabase()) return;
+        await using var setup = CreateDb();
+        var initial = await CreateService(setup, "early-conflict-owner").GetSnapshotAsync();
+        await using var loserDb = CreateDb();
+        await using var winnerDb = CreateDb();
+        var loser = CreateService(loserDb, "early-conflict-owner");
+        var winner = CreateService(winnerDb, "early-conflict-owner");
+        var stale = await loser.GetSnapshotAsync();
+        var winning = Clone(initial);
+        winning.Places.Add(new Place { Id = "winner-place", Name = "Winner", City = "Tokyo", Latitude = 35.68, Longitude = 139.7 });
+        var saved = Assert.IsType<ReplaceResult.Success>(await winner.ReplaceAsync(winning, initial.Version));
+        stale.Places.Add(new Place { Id = "loser-place", Name = "Loser", City = "Tokyo", Latitude = 35.68, Longitude = 139.7 });
+
+        var conflict = Assert.IsType<ReplaceResult.Conflict>(await loser.ReplaceAsync(stale, stale.Version));
+
+        Assert.Equal(saved.Snapshot.Version, conflict.Snapshot.Version);
+        Assert.Equal("winner-place", Assert.Single(conflict.Snapshot.Places).Id);
+        var recovered = await loser.GetSnapshotAsync();
+        Assert.Equal(saved.Snapshot.Version, recovered.Version);
+        Assert.Equal("winner-place", Assert.Single(recovered.Places).Id);
+        var edit = await new TripItemEditor(loser).EditAsync("places", "update", "winner-place",
+            new System.Text.Json.Nodes.JsonObject { ["selected"] = true }, recovered.Version);
+        Assert.True(edit.Success);
+    }
+
+    [Fact]
     public async Task Different_authenticated_owners_are_isolated_in_postgres()
     {
         if (!HasDatabase()) return;
