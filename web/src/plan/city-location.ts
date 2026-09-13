@@ -1,4 +1,4 @@
-import cityCenters from '../../../shared/city-centers.json';
+import cityCenters from '../data/city-centers.json';
 import type { Place } from '../types';
 
 export const centers: Record<string, [number, number]> = Object.fromEntries(
