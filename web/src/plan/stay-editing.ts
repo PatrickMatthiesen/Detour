@@ -1,4 +1,5 @@
 import type { Stay, TripSnapshot } from "../types";
+import { stayCityError } from "./city-location";
 import { daySummary } from "./planning";
 
 const DAY = 86_400_000;
@@ -97,6 +98,11 @@ export function reviewStayRoute(snapshot: TripSnapshot, proposed: Stay[]): StayR
     if (checkIn === null) errors.push(`Stay in ${cityText(stay.city)} has an invalid check-in date: ${stay.checkIn}.`);
     if (checkOut === null) errors.push(`Stay in ${cityText(stay.city)} has an invalid check-out date: ${stay.checkOut}.`);
     if (!stay.city?.trim()) errors.push(`Stay on ${dateText(stay.checkIn)} needs a city.`);
+    if (stay.city?.trim()) {
+      const locationError = stayCityError(stay.city, snapshot.places);
+      const previous = snapshot.stays.find(item => item.id === stay.id);
+      if (locationError) (previous?.city === stay.city ? warnings : errors).push(locationError);
+    }
     if (checkIn !== null && checkOut !== null) {
       if (checkOut <= checkIn) errors.push(`Stay in ${cityText(stay.city)} must cover at least one night.`);
       if (tripStart !== null && checkIn < tripStart) errors.push(`Stay in ${cityText(stay.city)} starts before the trip: ${dateText(stay.checkIn)}.`);

@@ -73,6 +73,11 @@ public sealed class TripMcpToolsTests
                 Assert.Contains("clearFields", schema);
                 Assert.Contains("create", schema);
             }
+            if (method.Name == "EditStay")
+            {
+                Assert.Contains("one mapped city or city area", tool.Description);
+                Assert.Contains("put extra destinations in name or notes", tool.Description);
+            }
         }
         Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<TripTaskChanges>("{\"unexpected\":true}", new JsonSerializerOptions(JsonSerializerDefaults.Web)));
     }

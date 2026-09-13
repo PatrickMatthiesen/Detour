@@ -226,6 +226,31 @@ public sealed class TripItemEditorTests
         Assert.Empty(current.Tasks);
     }
 
+    [Fact]
+    public async Task Stay_editor_rejects_a_combined_city_label()
+    {
+        await using var db = CreateDb();
+        var (service, editor) = CreateEditor(db);
+        var initial = await service.GetSnapshotAsync();
+
+        var result = await editor.EditAsync(
+            "stays",
+            "create",
+            "stay-1",
+            new JsonObject
+            {
+                ["city"] = "Osaka / Kyoto",
+                ["checkIn"] = "2026-10-09",
+                ["checkOut"] = "2026-10-13"
+            },
+            initial.Version);
+
+        Assert.False(result.Success);
+        Assert.Equal("validation_failed", result.Error);
+        Assert.Contains("must name one map city or city area", result.Message);
+        Assert.Empty((await service.GetSnapshotAsync()).Stays);
+    }
+
     private static TripDbContext CreateDb()
     {
         var options = new DbContextOptionsBuilder<TripDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;

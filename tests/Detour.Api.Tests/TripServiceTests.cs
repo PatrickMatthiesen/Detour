@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Configuration;
+using System.Text.Json;
 using Detour.Api;
 
 namespace Detour.Api.Tests;
@@ -54,6 +55,125 @@ public sealed class TripServiceTests
         Assert.IsType<ReplaceResult.Invalid>(result);
         Assert.Equal(initial.Version, (await service.GetSnapshotAsync()).Version);
         Assert.Empty((await service.GetSnapshotAsync()).Stays);
+    }
+
+    public static TheoryData<string> InvalidStayCities => new()
+    {
+        "Osaka / Kyoto",
+        @"Osaka \ Kyoto",
+        "Osaka; Kyoto",
+        "Osaka & Kyoto",
+        "Osaka + Kyoto",
+        "Osaka and Kyoto",
+        "Osaka OR Kyoto",
+        "Other",
+        "unknown city"
+    };
+
+    [Theory]
+    [MemberData(nameof(InvalidStayCities))]
+    public async Task New_stays_reject_combined_or_placeholder_cities_even_with_matching_coordinates(string city)
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db);
+        var initial = await service.GetSnapshotAsync();
+        initial.Places.Add(new Place { Name = "Mapped hotel", City = city, Latitude = 35.0, Longitude = 136.0 });
+        initial.Stays.Add(new Stay
+        {
+            City = city,
+            CheckIn = new(2026, 10, 9),
+            CheckOut = new(2026, 10, 10)
+        });
+
+        var result = Assert.IsType<ReplaceResult.Invalid>(await service.ReplaceAsync(initial, initial.Version));
+
+        Assert.Contains("must name one map city or city area", result.Message);
+        Assert.Empty((await service.GetSnapshotAsync()).Stays);
+    }
+
+    [Fact]
+    public async Task Unknown_city_area_is_accepted_when_a_matching_place_has_coordinates()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db);
+        var initial = await service.GetSnapshotAsync();
+        initial.Places.Add(new Place { Name = "Mapped hotel", City = "Lake Kawaguchi", Latitude = 35.5, Longitude = 138.76 });
+        initial.Stays.Add(new Stay
+        {
+            City = "  Lake Kawaguchi  ",
+            CheckIn = new(2026, 10, 9),
+            CheckOut = new(2026, 10, 10)
+        });
+
+        var saved = Assert.IsType<ReplaceResult.Success>(await service.ReplaceAsync(initial, initial.Version));
+
+        Assert.Equal("Lake Kawaguchi", Assert.Single(saved.Snapshot.Stays).City);
+    }
+
+    [Fact]
+    public async Task Unknown_city_without_a_matching_mapped_place_is_rejected()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db);
+        var initial = await service.GetSnapshotAsync();
+        initial.Stays.Add(new Stay
+        {
+            City = "Takayama",
+            CheckIn = new(2026, 10, 9),
+            CheckOut = new(2026, 10, 10)
+        });
+
+        var result = Assert.IsType<ReplaceResult.Invalid>(await service.ReplaceAsync(initial, initial.Version));
+
+        Assert.Contains("add a saved place in that city with valid coordinates", result.Message);
+        Assert.Empty((await service.GetSnapshotAsync()).Stays);
+    }
+
+    [Fact]
+    public async Task Unchanged_legacy_unresolved_stay_does_not_block_unrelated_edits()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db);
+        var initial = await service.GetSnapshotAsync();
+        initial.Stays.Add(new Stay
+        {
+            Id = "legacy-stay",
+            City = "Osaka / Kyoto",
+            CheckIn = new(2026, 10, 9),
+            CheckOut = new(2026, 10, 10)
+        });
+        db.Trips.Single().Json = JsonSerializer.Serialize(initial, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        await db.SaveChangesAsync();
+        var legacy = await service.GetSnapshotAsync();
+        legacy.Tasks.Add(new TripTask { Id = "task-1", Title = "Keep planning", Scope = "before" });
+
+        var saved = Assert.IsType<ReplaceResult.Success>(await service.ReplaceAsync(legacy, legacy.Version));
+
+        Assert.Equal("Osaka / Kyoto", Assert.Single(saved.Snapshot.Stays).City);
+        Assert.Single(saved.Snapshot.Tasks);
+    }
+
+    [Fact]
+    public async Task Removing_the_last_mapped_place_for_an_existing_stay_is_rejected()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db);
+        var initial = await service.GetSnapshotAsync();
+        initial.Places.Add(new Place { Id = "takayama-map", Name = "Mapped hotel", City = "Takayama", Latitude = 36.14, Longitude = 137.25 });
+        initial.Stays.Add(new Stay
+        {
+            Id = "takayama-stay",
+            City = "Takayama",
+            CheckIn = new(2026, 10, 9),
+            CheckOut = new(2026, 10, 10)
+        });
+        var seeded = Assert.IsType<ReplaceResult.Success>(await service.ReplaceAsync(initial, initial.Version));
+        seeded.Snapshot.Places.Clear();
+
+        var result = Assert.IsType<ReplaceResult.Invalid>(await service.ReplaceAsync(seeded.Snapshot, seeded.Snapshot.Version));
+
+        Assert.Contains("would lose its map location", result.Message);
+        Assert.Single((await service.GetSnapshotAsync()).Places);
     }
 
     [Fact]

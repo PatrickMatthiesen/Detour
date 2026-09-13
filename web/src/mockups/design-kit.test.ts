@@ -3,6 +3,15 @@ import maplibregl from "maplibre-gl";
 import { cityAreaPerimeter, cityRouteFeatures } from "./design-kit";
 import type { Place } from "../types";
 
+it("restores all ten connections when combined stay cities are corrected", () => {
+  const cities = ['Tokyo','Hakone','Nagoya','Osaka / Kyoto','Kinosaki Onsen','Kurashiki','Onomichi','Hiroshima','Tokyo','Nikkō','Tokyo / Haneda'];
+  expect(cityRouteFeatures(cities.map(city => ({city})), []).features).toHaveLength(7);
+  const corrected = cities.map(city => ({city: city === 'Osaka / Kyoto' ? 'Osaka' : city === 'Tokyo / Haneda' ? 'Tokyo' : city}));
+  const route = cityRouteFeatures(corrected, []).features;
+  expect(route).toHaveLength(10);
+  expect(route.map(feature => [feature.properties?.from,feature.properties?.to])).toEqual(corrected.slice(1).map((stop,index) => [corrected[index].city,stop.city]));
+});
+
 type Coordinate = readonly number[];
 
 function insidePolygon(point: Coordinate, polygon: Array<[number, number]>) {

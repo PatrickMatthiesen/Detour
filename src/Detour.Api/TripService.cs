@@ -42,8 +42,13 @@ public sealed class TripService(TripDbContext db, OwnerAccessor ownerAccessor, P
             await EnrichPhotosAsync(current, owner, cancellationToken);
             return new ReplaceResult.Conflict(current);
         }
+        var previous = Read(before);
         Dictionary<string, GooglePlaceLocationRow> locations;
-        try { locations = await NormalizeCoordinatesAsync(input, Read(before), owner, cancellationToken); }
+        try
+        {
+            locations = await NormalizeCoordinatesAsync(input, previous, owner, cancellationToken);
+            StayCityValidator.Validate(input, previous);
+        }
         catch (ArgumentException exception) { return new ReplaceResult.Invalid(exception.Message); }
         var storedPhotos = await db.PlacePhotos.AsNoTracking().Where(x => x.OwnerId == owner).ToDictionaryAsync(x => x.PlaceId, cancellationToken);
         var staged = new Dictionary<string, PlacePhotoRow>();
@@ -349,7 +354,10 @@ public sealed class TripService(TripDbContext db, OwnerAccessor ownerAccessor, P
         if (snapshot.Places.Select(x => x.Id).Distinct(StringComparer.Ordinal).Count() != snapshot.Places.Count)
             throw new ArgumentException("Place IDs must be unique.");
         foreach (var stay in snapshot.Stays)
+        {
+            stay.City = stay.City?.Trim() ?? "";
             if (stay.CheckOut < stay.CheckIn) throw new ArgumentException("Stay checkout must not precede check-in.");
+        }
         foreach (var place in snapshot.Places)
         {
             if (string.IsNullOrWhiteSpace(place.Id) || string.IsNullOrWhiteSpace(place.Name) || string.IsNullOrWhiteSpace(place.City)) throw new ArgumentException("Place id, name, and city are required.");
