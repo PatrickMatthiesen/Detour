@@ -40,6 +40,9 @@ public sealed class TripService(TripDbContext db, OwnerAccessor ownerAccessor, P
         {
             var current = Read(before);
             await EnrichPhotosAsync(current, owner, cancellationToken);
+            // A prior read may have left the older trip row tracked. Detach it so
+            // the next read in this service scope observes the winning version.
+            db.ChangeTracker.Clear();
             return new ReplaceResult.Conflict(current);
         }
         var previous = Read(before);
