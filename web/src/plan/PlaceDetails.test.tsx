@@ -55,6 +55,19 @@ describe("place details", () => {
     expect(html).not.toContain("On this day");
   });
 
+  it("prioritizes notes and keeps secondary facts out of the main story", () => {
+    const html = renderToStaticMarkup(<PlaceDetails place={{
+      ...place, description: "A quiet temple", notes: "Use the east entrance.",
+      reservation: "Required", priority: "high", status: "saved", selected: false,
+    }} embedded onClose={close} onEdit={close} onToggleTrip={close} />);
+    expect(html.indexOf("Use the east entrance.")).toBeLessThan(html.indexOf("Reservations"));
+    expect(html.indexOf("Priority")).toBeGreaterThan(html.indexOf("<summary>More details</summary>"));
+    expect(html).not.toContain("Chosen for trip");
+    expect(html).not.toContain("<dt>Status</dt>");
+    expect(html).not.toContain("<footer");
+    expect(html.indexOf('aria-label="Add to trip"')).toBeLessThan(html.indexOf("</header>"));
+  });
+
   it("uses edited planning fields before legacy note labels", () => {
     const html = renderToStaticMarkup(<PlaceDetails place={{
       ...place,

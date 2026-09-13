@@ -120,8 +120,8 @@ export function DesignMap({places,selected,city,onCity,onPlace,focusedPlaceId,bo
  const host=useRef<HTMLDivElement>(null),map=useRef<maplibregl.Map|null>(null),[ready,setReady]=useState(false),[failed,setFailed]=useState(false);const callbacks=useRef({onCity,onPlace,places});callbacks.current={onCity,onPlace,places};
  const insets=useRef({leftInset,bottomInset});insets.current={leftInset,bottomInset};
  const focused=focusedPlaceId?places.find(p=>p.id===focusedPlaceId):undefined;
- useEffect(()=>{if(!host.current)return;const m=new maplibregl.Map({container:host.current,style:'https://tiles.openfreemap.org/styles/positron',center:[137.5,35.8],zoom:5.8,attributionControl:{compact:true}});map.current=m;let live=true;
- m.addControl(new maplibregl.NavigationControl({showCompass:false}),'top-right');
+ useEffect(()=>{if(!host.current)return;const m=new maplibregl.Map({container:host.current,style:'https://tiles.openfreemap.org/styles/positron',center:[137.5,35.8],zoom:5.8,attributionControl:{compact:true},locale:{"NavigationControl.ResetBearing":"Reset rotation and tilt"}});map.current=m;let live=true;
+ m.addControl(new maplibregl.NavigationControl({showCompass:true,visualizePitch:true}),'top-right');
  m.on('load',()=>{if(!live)return; for(const id of ['areas','points','route'])m.addSource('dk-'+id,{type:'geojson',data:empty});
  m.addLayer({id:'dk-area-fill',type:'fill',source:'dk-areas',paint:{'fill-color':['get','statusColor'],'fill-opacity':['case',['get','active'],0.10,0.03]}});
  m.addLayer({id:'dk-area-edge',type:'line',source:'dk-areas',paint:{'line-color':['get','statusColor'],'line-width':1.5,'line-dasharray':[3,3]}});

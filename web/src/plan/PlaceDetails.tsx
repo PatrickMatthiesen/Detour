@@ -65,7 +65,12 @@ export default function PlaceDetails({place,scheduled=false,onAdd,onEdit,onClose
  useEffect(()=>{if(!embedded)dialog.current?.showModal()},[embedded]);
  const {facts,notes,needsResearch}=detailContent(place);
  const links=[["Source",place.sourceUrl],["Google Maps",place.googleMapsUrl],["Instagram",place.instagramUrl]].filter(([,url])=>{try{return !!url&&["http:","https:"].includes(new URL(url).protocol)}catch{return false}});
- const hasPhoto=!!photoFor(place).photo?.url;
+ const photo = photoFor(place).photo;
+ const hasPhoto = !!photo?.url;
+ const photoContent = hasPhoto && <div className="place-photo-trigger"><PlacePhoto place={place} className="place-details-photo"/><button type="button" className="place-photo-open" aria-label={`Enlarge photo of ${place.name}`} onClick={()=>setPhotoOpen(true)}/></div>;
+ const practicalFacts = facts.filter(([label]) => ["Visit", "Reservations", "Opening hours", "When to go", "Location"].includes(label));
+ const otherFacts = facts.filter(([label, value]) => ["Priority", "Coordinates"].includes(label) || (label === "Status" && value.toLowerCase() !== "saved"));
+ const renderFacts = (items: [string,string][]) => <dl className="place-details-facts">{items.map(([label,value])=><div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>;
  const content=<>
   <div className="place-details-body">
    {embedded && (place.latitude == null || place.longitude == null) && <p className="place-location-missing">This place does not have a map pin yet.</p>}
@@ -81,12 +86,32 @@ export default function PlaceDetails({place,scheduled=false,onAdd,onEdit,onClose
  </>;
  if(embedded) return <section className="place-details place-details-embedded" aria-labelledby="place-details-title">
   <header>
-   <button type="button" className="place-details-back" aria-label="Back to places" onClick={onClose}><span aria-hidden="true">←</span> Back to places</button>
-   {onEdit&&<button type="button" className="place-details-edit" onClick={onEdit}>Edit place</button>}
+   <button type="button" className="place-details-back" aria-label="Back to places" onClick={onClose}><span aria-hidden="true">←</span> Back</button>
+   <div className="place-details-header-actions">
+    {onEdit&&<button type="button" className="place-details-edit" aria-label="Edit place" onClick={onEdit}>Edit</button>}
+    {onToggleTrip&&<button type="button" className={`place-details-trip-toggle${place.selected ? " is-added" : ""}`} aria-pressed={!!place.selected} aria-label={place.selected ? "Remove from trip" : "Add to trip"} title={place.selected ? "Remove from trip" : "Choose this place without scheduling a day"} onClick={onToggleTrip}>
+     {place.selected ? <Check size={15}/> : <Plus size={15}/>} {place.selected ? "Added to trip" : "Add to trip"}
+    </button>}
+   </div>
   </header>
-  <div className="place-details-embedded-heading"><h2 id="place-details-title">{place.name}</h2><p className="place-details-location">{[place.city,place.area,place.category].filter(Boolean).join(" · ")}</p></div>
-  {content}
-  {onToggleTrip&&<footer className="place-details-trip-actions">{place.selected?<><span className="place-details-trip-status"><Check size={16}/> Added to trip</span><button type="button" onClick={onToggleTrip}>Remove from trip</button></>:<button type="button" className="place-details-add" onClick={onToggleTrip}><Plus size={16}/> Add to trip</button>}</footer>}
+  <div className="place-details-body">
+   <div className="place-details-embedded-heading"><h2 id="place-details-title">{place.name}</h2><p className="place-details-location">{[place.city,place.area,place.category].filter(Boolean).join(" · ")}</p></div>
+   <div className={`place-details-story${hasPhoto ? photo?.kind === "place" ? " has-place-photo" : " has-context-photo" : ""}`}>
+    {photoContent}
+    <div>{place.description&&<p>{place.description}</p>}{needsResearch&&<span className="place-details-research">Needs checking</span>}</div>
+   </div>
+   {!!notes.length&&<section className="place-details-notes" aria-label="Notes">{notes.map((note,index)=><p key={index}>{note}</p>)}</section>}
+   {(practicalFacts.length > 0 || links.length > 0 || place.latitude == null || place.longitude == null) && <section className="place-details-practical" aria-label="Practical details">
+    <h3>Practical details</h3>
+    {!!practicalFacts.length && renderFacts(practicalFacts)}
+    <div className="place-details-links">
+     {!!links.length&&<nav aria-label="Place sources">{links.map(([label,url])=><a key={label} href={url!} target="_blank" rel="noreferrer">{label}<ExternalLink size={13}/></a>)}</nav>}
+     {(place.latitude == null || place.longitude == null) && <span className="place-location-missing">Location not pinned</span>}
+    </div>
+   </section>}
+   {!!otherFacts.length&&<details className="place-details-more"><summary>More details</summary>{renderFacts(otherFacts)}</details>}
+  </div>
+  {photoOpen&&<PhotoViewer place={place} onClose={()=>setPhotoOpen(false)}/>}
  </section>;
  return <dialog ref={dialog} className="place-details" onCancel={e=>{e.stopPropagation();onClose()}} aria-labelledby="place-details-title">
   <header><div><h2 id="place-details-title">{place.name}</h2><p className="place-details-location">{[place.city,place.area,place.category].filter(Boolean).join(" · ")}</p></div><button aria-label="Close place details" onClick={onClose}><X size={20}/></button></header>

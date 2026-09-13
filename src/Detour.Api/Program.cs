@@ -161,7 +161,8 @@ builder.Services.AddAuthorization(options =>
                 .Contains(oauthScope, StringComparer.Ordinal)));
 });
 
-builder.Services.AddMcpServer().WithHttpTransport(options => options.Stateless = false).WithTools<TripMcpTools>();
+builder.Services.AddMcpServer(options => options.ServerInstructions = TripMcpTools.PhotoInstructions)
+    .WithHttpTransport(options => options.Stateless = false).WithTools<TripMcpTools>();
 builder.Services.AddScoped<OpenIddictInitializer>();
 var app = builder.Build();
 app.UseDefaultFiles();

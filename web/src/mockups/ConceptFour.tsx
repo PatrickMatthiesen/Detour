@@ -5,6 +5,7 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Hotel,
   Plane,
   TrainFront,
@@ -21,11 +22,10 @@ import {
 import type { Place, TripSnapshot } from "../types";
 import PlaceDetails from "../plan/PlaceDetails";
 import { usePlacesDrawer } from "./use-places-drawer";
+import { useRecentCities } from "./recent-cities";
 import { buildRouteStops, summarizeCityStops, STATUS_COLORS } from "./route-status";
 import "./four.css";
 import "./places-drawer.css";
-
-const CITIES = ["Tokyo", "Kyoto", "Osaka"];
 
 function placeDescription(place: Place) {
   return (
@@ -68,6 +68,7 @@ export function PlacesExplorer({trip, selected, toggle, loading, error, header, 
   const search = useSearch({ strict: false });
   const navigate = useNavigate();
   const city = search.city ?? "Tokyo";
+  const recentCities = useRecentCities(trip?.trip.id ?? "preview", city);
   const category = search.category ?? "All";
   const selectedOnly = search.chosen === true;
   const query = search.q ?? "";
@@ -176,14 +177,11 @@ export function PlacesExplorer({trip, selected, toggle, loading, error, header, 
           <div className="d4-browse-head">
             <div>
               <h1>Places</h1>
-              <p>
-                {trip ? `${trip.places.length} saved ideas` : "Loading places"}
-              </p>
             </div>
-            <div className="d4-head-actions"><span className="d4-selection-count">{selected.size} chosen</span>{onAdd && <button onClick={onAdd}>+ Add place</button>}</div>
+            <div className="d4-head-actions"><button className="d4-selection-count" aria-pressed={selectedOnly} aria-label={selectedOnly ? "Show all saved places" : "Show places added to trip"} title={selectedOnly ? "Show all saved places" : "Filter to places added to this trip"} onClick={() => updateFilters({chosen: selectedOnly ? undefined : true})}>Added to trip ({selected.size})</button>{onAdd && <button onClick={onAdd}>+ Add place</button>}</div>
           </div>
-          <div className="d4-city-tabs" role="tablist" aria-label="Browse city">
-            {CITIES.map((item) => {
+          <div className="d4-city-tabs" role="tablist" aria-label="Browse city" style={{gridTemplateColumns:`repeat(${recentCities.length + 1},minmax(0,1fr)) 62px`}}>
+            {["All", ...recentCities].map((item) => {
               const count = trip ? cityPlaces(trip, item).length : 0;
               return (
                 <button
@@ -192,6 +190,7 @@ export function PlacesExplorer({trip, selected, toggle, loading, error, header, 
                   role="tab"
                   aria-selected={city === item}
                   className={city === item ? "is-active" : ""}
+                  title={item}
                   onClick={() => changeCity(item)}
                 >
                   <span>{item}</span>
@@ -199,17 +198,16 @@ export function PlacesExplorer({trip, selected, toggle, loading, error, header, 
                 </button>
               );
             })}
-            <select className="d4-more-cities" aria-label="Browse other cities" value={CITIES.includes(city) ? "" : city} onChange={event => changeCity(event.target.value)}>
-              <option value="" disabled>More cities</option>
-              <option value="All">All cities</option>
+            <div className="d4-city-picker">
+            <span aria-hidden="true">More</span>
+            <ChevronDown size={16} aria-hidden="true"/>
+            <select className="d4-more-cities" aria-label="Browse other cities" title="Choose a city" value="" onChange={event => changeCity(event.target.value)}>
+              <option value="" disabled>Choose a city</option>
               {cityList.map(item => <option key={item} value={item}>{item}</option>)}
             </select>
+            </div>
           </div>
           <div className="d4-search-bar">
-            <select aria-label="Place selection" value={selectedOnly ? "chosen" : "all"} onChange={event => updateFilters({ chosen: event.target.value === "chosen" ? true : undefined })}>
-              <option value="all">All saved</option>
-              <option value="chosen">Chosen</option>
-            </select>
             <Search size={16} aria-hidden="true" />
             <input type="search" value={query} onChange={event => updateFilters({ q: event.target.value || undefined }, true)} placeholder="Search places, food, ideas…" aria-label="Search saved places" />
           </div>
