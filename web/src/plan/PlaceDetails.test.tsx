@@ -22,6 +22,52 @@ describe("place details", () => {
     expect(html).toContain("On this day");
   });
 
+  it("renders embedded details with navigation and trip actions", () => {
+    const html = renderToStaticMarkup(<PlaceDetails
+      place={{ ...place, description: "A quiet temple", notes: "Use the east entrance." }}
+      embedded
+      onClose={close}
+      onEdit={close}
+      onToggleTrip={close}
+    />);
+    expect(html).toContain('class="place-details place-details-embedded"');
+    expect(html).not.toContain("<dialog");
+    expect(html).toContain("Back to places");
+    expect(html).toContain("Edit place");
+    expect(html).toContain("Add to trip");
+    expect(html).not.toContain("Added to trip");
+    expect(html).not.toContain("Remove from trip");
+    expect(html).not.toContain("Add to this day");
+    expect(html).not.toContain("On this day");
+  });
+
+  it("shows the selected trip status and removal action in embedded details", () => {
+    const html = renderToStaticMarkup(<PlaceDetails
+      place={{ ...place, selected: true }}
+      embedded
+      onClose={close}
+      onToggleTrip={close}
+    />);
+    expect(html).toContain("Added to trip");
+    expect(html).toContain("Remove from trip");
+    expect(html).not.toContain("Add to trip");
+    expect(html).not.toContain("Add to this day");
+    expect(html).not.toContain("On this day");
+  });
+
+  it("prioritizes notes and keeps secondary facts out of the main story", () => {
+    const html = renderToStaticMarkup(<PlaceDetails place={{
+      ...place, description: "A quiet temple", notes: "Use the east entrance.",
+      reservation: "Required", priority: "high", status: "saved", selected: false,
+    }} embedded onClose={close} onEdit={close} onToggleTrip={close} />);
+    expect(html.indexOf("Use the east entrance.")).toBeLessThan(html.indexOf("Reservations"));
+    expect(html.indexOf("Priority")).toBeGreaterThan(html.indexOf("<summary>More details</summary>"));
+    expect(html).not.toContain("Chosen for trip");
+    expect(html).not.toContain("<dt>Status</dt>");
+    expect(html).not.toContain("<footer");
+    expect(html.indexOf('aria-label="Add to trip"')).toBeLessThan(html.indexOf("</header>"));
+  });
+
   it("uses edited planning fields before legacy note labels", () => {
     const html = renderToStaticMarkup(<PlaceDetails place={{
       ...place,

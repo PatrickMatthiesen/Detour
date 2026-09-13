@@ -115,18 +115,20 @@ function routeArrowImage():ImageData {
  context.beginPath();context.moveTo(8,5);context.lineTo(15,12);context.lineTo(8,19);context.stroke();
  return context.getImageData(0,0,24,24);
 }
-export function DesignMap({places,selected,city,onCity,onPlace,className='',route=false,routeStops=noRouteStops,cityStatuses=noCityStatuses,palette,showInformation=true}:{places:Place[];selected:Set<string>;city?:string;onCity?:(city:string)=>void;onPlace?:(place:Place)=>void;className?:string;route?:boolean;routeStops?:ReadonlyArray<{city:string}>;cityStatuses?:ReturnType<typeof summarizeCityStops>;showInformation?:boolean;palette?:'stone'|'sage'|'sand'|'original'|'journey'}){
+export function DesignMap({places,selected,city,onCity,onPlace,focusedPlaceId,bottomInset=0,leftInset=0,className='',route=false,routeStops=noRouteStops,cityStatuses=noCityStatuses,palette,showInformation=true}:{places:Place[];selected:Set<string>;city?:string;onCity?:(city:string)=>void;onPlace?:(place:Place)=>void;focusedPlaceId?:string;bottomInset?:number;leftInset?:number;className?:string;route?:boolean;routeStops?:ReadonlyArray<{city:string}>;cityStatuses?:ReturnType<typeof summarizeCityStops>;showInformation?:boolean;palette?:'stone'|'sage'|'sand'|'original'|'journey'}){
  const originalPaint=useRef(new Map<string,unknown>());
  const host=useRef<HTMLDivElement>(null),map=useRef<maplibregl.Map|null>(null),[ready,setReady]=useState(false),[failed,setFailed]=useState(false);const callbacks=useRef({onCity,onPlace,places});callbacks.current={onCity,onPlace,places};
- useEffect(()=>{if(!host.current)return;const m=new maplibregl.Map({container:host.current,style:'https://tiles.openfreemap.org/styles/positron',center:[137.5,35.8],zoom:5.8,attributionControl:{compact:true}});map.current=m;let live=true;
- m.addControl(new maplibregl.NavigationControl({showCompass:false}),'top-right');
+ const insets=useRef({leftInset,bottomInset});insets.current={leftInset,bottomInset};
+ const focused=focusedPlaceId?places.find(p=>p.id===focusedPlaceId):undefined;
+ useEffect(()=>{if(!host.current)return;const m=new maplibregl.Map({container:host.current,style:'https://tiles.openfreemap.org/styles/positron',center:[137.5,35.8],zoom:5.8,attributionControl:{compact:true},locale:{"NavigationControl.ResetBearing":"Reset rotation and tilt"}});map.current=m;let live=true;
+ m.addControl(new maplibregl.NavigationControl({showCompass:true,visualizePitch:true}),'top-right');
  m.on('load',()=>{if(!live)return; for(const id of ['areas','points','route'])m.addSource('dk-'+id,{type:'geojson',data:empty});
  m.addLayer({id:'dk-area-fill',type:'fill',source:'dk-areas',paint:{'fill-color':['get','statusColor'],'fill-opacity':['case',['get','active'],0.10,0.03]}});
  m.addLayer({id:'dk-area-edge',type:'line',source:'dk-areas',paint:{'line-color':['get','statusColor'],'line-width':1.5,'line-dasharray':[3,3]}});
  m.addLayer({id:'dk-route-line',type:'line',source:'dk-route',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':routeColor,'line-width':1.2,'line-opacity':0.65}});
  m.addImage('dk-route-arrow',routeArrowImage(),{pixelRatio:2});
  m.addLayer({id:'dk-route-arrows',type:'symbol',source:'dk-route',layout:{'symbol-placement':'line','symbol-spacing':130,'icon-image':'dk-route-arrow','icon-rotation-alignment':'map','icon-keep-upright':false,'icon-ignore-placement':true,'icon-padding':8},paint:{'icon-opacity':0.85}});
- m.addLayer({id:'dk-dots',type:'circle',source:'dk-points',filter:['==',['get','place'],true],paint:{'circle-radius':['interpolate',['linear'],['zoom'],3,1.5,6,2.5,10,4.5,14,7],'circle-color':['case',['get','selected'],STATUS_COLORS.picked,'#ffffff'],'circle-stroke-color':STATUS_COLORS.saved,'circle-stroke-width':['interpolate',['linear'],['zoom'],3,0.6,10,1.5,14,2]}});
+ m.addLayer({id:'dk-dots',type:'circle',source:'dk-points',filter:['==',['get','place'],true],paint:{'circle-radius':['interpolate',['linear'],['zoom'],3,['case',['get','focused'],3,1.5],6,['case',['get','focused'],4,2.5],10,['case',['get','focused'],7,4.5],14,['case',['get','focused'],11,7]],'circle-color':['case',['get','selected'],STATUS_COLORS.picked,'#ffffff'],'circle-stroke-color':['case',['get','focused'],'#263b59',STATUS_COLORS.saved],'circle-stroke-width':['interpolate',['linear'],['zoom'],3,['case',['get','focused'],3,0.6],10,['case',['get','focused'],3,1.5],14,['case',['get','focused'],3,2]]}});
  m.addLayer({id:'dk-city-status',type:'circle',source:'dk-points',filter:['==',['get','place'],false],paint:{'circle-radius':4,'circle-color':['get','statusColor'],'circle-stroke-color':['case',['get','viewed'],'#263b59','#ffffff'],'circle-stroke-width':['case',['get','viewed'],2,1.5]}});
  m.addLayer({id:'dk-city-labels',type:'symbol',source:'dk-points',filter:['==',['get','place'],false],layout:{'symbol-sort-key':['case',['get','planned'],0,1],'text-field':['step',['zoom'],['get','city'],5,['get','label']],'text-font':['Noto Sans Regular'],'text-size':['interpolate',['linear'],['zoom'],3,11,7,14],'text-padding':2,'text-variable-anchor':['top','bottom','left','right','top-left','top-right','bottom-left','bottom-right'],'text-radial-offset':0.8,'text-justify':'auto'},paint:{'text-color':'#263b59','text-halo-color':'#ffffff','text-halo-width':3}});
  m.addLayer({id:'dk-labels',type:'symbol',source:'dk-points',filter:['==',['get','place'],true],minzoom:8,layout:{'text-field':['get','label'],'text-font':['Noto Sans Regular'],'text-size':13,'text-variable-anchor':['top','bottom','left','right'],'text-radial-offset':0.8,'text-justify':'auto'},paint:{'text-color':'#263b59','text-halo-color':'#ffffff','text-halo-width':2}});
@@ -153,13 +155,15 @@ export function DesignMap({places,selected,city,onCity,onPlace,className='',rout
  pointFeatures.push({type:'Feature',properties:{city:c,place:false,selected:active,planned:plannedCities.has(c),statusColor,viewed:c===city,detail:summary?`Accommodation: ${summary.label}. ${summary.detail}`:chosen?`${chosen} picked places`:'Saved ideas',label:ps.length?`${c}\n${ps.length} saved`:c},geometry:{type:'Point',coordinates:[x,y]}});
  }
  // Known places remain visible across cities; changing city only changes the camera.
- for(const p of places){if(p.longitude==null||p.latitude==null)continue;pointFeatures.push({type:'Feature',properties:{id:p.id,city:p.city,place:true,selected:selected.has(p.id),label:p.name},geometry:{type:'Point',coordinates:[p.longitude,p.latitude]}})}
+ for(const p of places){if(p.longitude==null||p.latitude==null)continue;pointFeatures.push({type:'Feature',properties:{id:p.id,city:p.city,place:true,selected:selected.has(p.id),focused:p.id===focusedPlaceId,label:p.name},geometry:{type:'Point',coordinates:[p.longitude,p.latitude]}})}
  (m.getSource('dk-points') as maplibregl.GeoJSONSource).setData({type:'FeatureCollection',features:pointFeatures});(m.getSource('dk-areas') as maplibregl.GeoJSONSource).setData({type:'FeatureCollection',features:areas});
- },[ready,places,selected,city,routeStops,cityStatuses]);
+ },[ready,places,selected,city,routeStops,cityStatuses,focusedPlaceId]);
  useEffect(()=>{const m=map.current;if(!m||!ready)return;
  (m.getSource('dk-route') as maplibregl.GeoJSONSource).setData(cityRouteFeatures(routeStops,places));
  },[ready,places,routeStops]);
- useEffect(()=>{if(!ready||!map.current)return;const center=city?cityMapCenter(city,callbacks.current.places):undefined;map.current.easeTo({center:center??[137.5,35.8],zoom:center?9.2:5.8,duration:400})},[city,ready]);
+ useEffect(()=>{if(!ready||!map.current)return;const center=city?cityMapCenter(city,callbacks.current.places):undefined;map.current.easeTo({center:center??[137.5,35.8],zoom:center?9.2:5.8,offset:[insets.current.leftInset/2,-insets.current.bottomInset/2],duration:400})},[city,ready]);
+ // Drawer movement must not trigger camera movement. Read its current size only when choosing a place.
+ useEffect(()=>{const m=map.current;if(!m||!ready||!focusedPlaceId||focused?.longitude==null||focused.latitude==null)return;m.easeTo({center:[focused.longitude,focused.latitude],zoom:Math.max(14,m.getZoom()),offset:[insets.current.leftInset/2,-insets.current.bottomInset/2],duration:400})},[focusedPlaceId,ready,focused?.longitude,focused?.latitude]);
  useEffect(()=>{const m=map.current;if(!m||!ready||!palette)return;
  const tones={journey:{land:'#f7f5ef',water:'#b8dce3',accent:'#cb5745'},stone:{land:'#eeeae3',water:'#c8d1cc',accent:'#80624c'},sage:{land:'#e9ede3',water:'#bdcfc7',accent:'#557052'},sand:{land:'#f2e7d5',water:'#cad6ca',accent:'#a05a37'},original:{land:'#fafafa',water:'#cdd0d2',accent:'#2463eb'}};
  const tone=tones[palette];

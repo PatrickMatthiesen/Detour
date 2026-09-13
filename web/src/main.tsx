@@ -55,6 +55,7 @@ import { LoginScreen } from "./LoginScreen";
 import { DetourIcon } from "./DetourIcon";
 import PreparePage from "./prepare/PreparePage";
 import { PlacesExplorer } from "./mockups/ConceptFour";
+import { validatePlacesSearch } from "./mockups/places-search";
 import { displayPlaces, shortDate } from "./mockups/design-kit";
 import PlanPage from "./plan/PlanPage";
 import "./detour.css";
@@ -980,13 +981,17 @@ function EditPlaceModal({
   place,
   onClose,
   onSave,
+  embedded = false,
 }: {
   place: Place;
   onClose: () => void;
   onSave: (place: Place) => void;
+  embedded?: boolean;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
-  useEffect(() => { dialog.current?.showModal(); }, []);
+  useEffect(() => {
+    if (!embedded) dialog.current?.showModal();
+  }, [embedded]);
   const [draft, setDraft] = useState(place);
   const set = <K extends keyof Place>(key: K, value: Place[K]) =>
     setDraft((current) => ({ ...current, [key]: value,
@@ -1011,13 +1016,8 @@ function EditPlaceModal({
         resolveCoordinates: (draft.latitude == null || draft.longitude == null) && !!draft.googleMapsUrl?.trim(),
       });
   };
-  return (
-    <dialog ref={dialog} className="edit-place-dialog" aria-labelledby="edit-place-heading" onCancel={onClose}
-      onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <form
-        className="modal edit-place-modal"
-        onSubmit={submit}
-      >
+  const form = (
+    <form className="modal edit-place-modal" onSubmit={submit}>
         <div className="modal-heading">
           <div>
             <span className="overline">LIBRARY ENTRY</span>
@@ -1028,9 +1028,9 @@ function EditPlaceModal({
             type="button"
             className="icon-button"
             onClick={onClose}
-            aria-label="Close"
+            aria-label={embedded ? "Back" : "Close"}
           >
-            <X size={18} />
+            {embedded ? <><span aria-hidden="true">←</span> Back</> : <X size={18} />}
           </button>
         </div>
         <div className="form-grid">
@@ -1242,7 +1242,19 @@ function EditPlaceModal({
             <Check size={17} /> Save changes
           </button>
         </div>
-      </form>
+    </form>
+  );
+  if (embedded) {
+    return (
+      <section className="edit-place-embedded" aria-labelledby="edit-place-heading">
+        {form}
+      </section>
+    );
+  }
+  return (
+    <dialog ref={dialog} className="edit-place-dialog" aria-labelledby="edit-place-heading" onCancel={onClose}
+      onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      {form}
     </dialog>
   );
 }
@@ -2450,7 +2462,6 @@ function AuthenticatedDetourApp({session}: {session: Awaited<ReturnType<typeof g
   const state = useTripState();
   const { pathname } = useLocation();
   const [adding, setAdding] = useState(false);
-  const [editing, setEditing] = useState<Place|null>(null);
   const { snapshot } = state;
   const header = <header className="detour-nav">
     <Link to="/" className="detour-brand"><DetourIcon/>Detour</Link>
@@ -2471,9 +2482,13 @@ function AuthenticatedDetourApp({session}: {session: Awaited<ReturnType<typeof g
       trip={{...snapshot,places:displayPlaces(snapshot.places)}} selected={selected}
       toggle={id => state.mutate(current => ({...current,places:current.places.map(p=>p.id===id?{...p,selected:!p.selected}:p)}))}
       loading={false} error="" header={header} onAdd={()=>setAdding(true)}
-      onEdit={place=>setEditing(snapshot.places.find(p=>p.id===place.id)??place)} />}
+      renderEdit={(place, close) => <EditPlaceModal key={place.id} embedded
+        place={snapshot.places.find(p => p.id === place.id) ?? place}
+        onClose={close} onSave={updated => {
+          state.mutate(current => ({...current, places:current.places.map(p => p.id === updated.id ? updated : p)}));
+          close();
+        }}/>}/>}
     {adding && <AddPlaceModal onClose={()=>setAdding(false)} onAdd={place=>{state.mutate(current=>({...current,places:[...current.places,place]}));setAdding(false)}}/>}
-    {editing && <EditPlaceModal place={editing} onClose={()=>setEditing(null)} onSave={place=>{state.mutate(current=>({...current,places:current.places.map(p=>p.id===place.id?place:p)}));setEditing(null)}}/>}
   </div>;
 }
 function RouteShell() {
@@ -2483,7 +2498,7 @@ function RouteShell() {
     ? <React.Suspense fallback={<p role="status">Loading design preview…</p>}><Outlet /></React.Suspense>
     : <App />;
 }
-const rootRoute = createRootRoute({ component: RouteShell });
+const rootRoute = createRootRoute({ component: RouteShell, validateSearch: validatePlacesSearch });
 const conceptRoutes = [
   createRoute({ getParentRoute: () => rootRoute, path: "/4", component: ConceptFour }),
   createRoute({ getParentRoute: () => rootRoute, path: "/5", component: ConceptFive }),

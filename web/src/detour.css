@@ -5,13 +5,28 @@
 .detour-icon {display:inline-block;flex-shrink:0;object-fit:contain;border-radius:22%;vertical-align:middle;}
 .detour-trip {font-size:13px;display:flex;gap:12px;align-items:center;}
 .detour-trip small {font-size:12px;color:#747b7b;}
-.detour-nav nav {display:flex;flex-direction:row;gap:5px;margin-left:auto;}
+.detour-nav nav {display:flex;flex-direction:row;gap:5px;margin-left:0;padding-left:16px;border-left:1px solid #e5e3dc;}
 .detour-nav nav a {padding:8px 14px;text-decoration:none;font-size:14px;color:#616b6c;border-radius:6px;}
 .detour-nav nav a[aria-current="page"] {background:#fbe6df;color:#a43c32;}
+.detour-account {margin-left:auto;}
 .detour-app .d4-page {grid-template-rows:58px minmax(0,1fr) auto;}
 .detour-save-error {position:fixed;top:60px;left:20px;right:20px;z-index:30;background:#fff0df;border:1px solid #d0aa71;padding:12px;font-size:14px;}
 .detour-save-error button {margin-left:12px;text-decoration:underline;}
 .detour-plan-shell {min-height:100vh;}
 .d4-head-actions {display:flex;align-items:center;gap:8px;}
 .d4-head-actions button,.d4-edit-place {font-size:12px;border:1px solid #d6ddd8;border-radius:5px;background:#fff;padding:5px 8px;}
-@media(max-width:640px){.detour-nav {gap:10px;padding:0 12px;}.detour-trip {display:none;}.detour-nav nav a {padding:8px 10px;}}
+@media(max-width:640px){.detour-nav {gap:10px;padding:0 12px;}.detour-trip {display:none;}.detour-nav nav {margin-left:auto;padding-left:0;border-left:0;}.detour-nav nav a {padding:8px 10px;}.detour-account {margin-left:0;}}
+
+/* The edit form can live in the browse drawer as a full-height, narrow view. */
+.edit-place-embedded {height:100%;min-height:0;overflow:hidden;background:#fffdf8;}
+.edit-place-embedded .edit-place-modal {width:100%;height:100%;min-width:0;max-width:none;max-height:none;box-sizing:border-box;display:flex;flex-direction:column;overflow:hidden;border:0;border-radius:0;box-shadow:none;padding:16px;background:transparent;}
+.edit-place-embedded .modal-heading {position:sticky;top:0;z-index:1;align-items:flex-start;margin:0 -16px 16px;padding:0 16px 12px;background:#fffdf8;border-bottom:1px solid #e5e3dc;}
+.edit-place-embedded .modal-heading {flex-shrink:0;position:static;}
+.edit-place-embedded .modal-heading h2 {font:600 21px Lato,system-ui,sans-serif;}
+.edit-place-embedded .overline {display:none;}
+.edit-place-embedded .edit-place-back {display:inline-flex;align-items:center;gap:5px;white-space:nowrap;padding:6px 8px;}
+.edit-place-embedded .form-grid {grid-template-columns:1fr;flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:4px;}
+.edit-place-embedded .edit-place-modal .edit-form-section {grid-column:1;}
+.edit-place-embedded .span-2 {grid-column:span 1;}
+.edit-place-embedded .modal-actions {flex-shrink:0;position:static;margin:12px -16px -16px;padding:12px 16px 16px;background:#fffdf8;border-top:1px solid #e5e3dc;}
+@media(max-width:640px){.edit-place-embedded .form-grid input,.edit-place-embedded .form-grid textarea,.edit-place-embedded .form-grid select {font-size:16px;}}

@@ -1,13 +1,15 @@
-import { type CSSProperties, type ReactNode, useEffect, useMemo, useState } from "react";
+import { type CSSProperties, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useSearch } from "@tanstack/react-router";
+import type { PlacesSearch } from "./places-search";
 import {
   Check,
-  Clock3,
-  ExternalLink,
+  ChevronLeft,
+  ChevronRight,
+  ChevronDown,
   Hotel,
   Plane,
   TrainFront,
   Search,
-  X,
 } from "lucide-react";
 import {
   DesignMap,
@@ -19,11 +21,11 @@ import {
 } from "./design-kit";
 import type { Place, TripSnapshot } from "../types";
 import PlaceDetails from "../plan/PlaceDetails";
-import { useCardPosition } from "./use-card-position";
+import { usePlacesDrawer } from "./use-places-drawer";
+import { useRecentCities } from "./recent-cities";
 import { buildRouteStops, summarizeCityStops, STATUS_COLORS } from "./route-status";
 import "./four.css";
-
-const CITIES = ["Tokyo", "Kyoto", "Osaka"];
+import "./places-drawer.css";
 
 function placeDescription(place: Place) {
   return (
@@ -31,10 +33,6 @@ function placeDescription(place: Place) {
     place.notes?.split("\n")[0] ||
     "Saved place awaiting a closer look."
   );
-}
-
-function placeFullDescription(place: Place) {
-  return place.description || place.notes || "Saved place awaiting research.";
 }
 
 const statusVariables = Object.fromEntries(Object.entries(STATUS_COLORS).map(([status,color])=>[`--status-${status}`,color])) as CSSProperties;
@@ -66,13 +64,37 @@ export default function ConceptFour() {
   return <PlacesExplorer {...state} />;
 }
 
-export function PlacesExplorer({trip, selected, toggle, loading, error, header, onAdd, onEdit}: {trip:TripSnapshot|null;selected:Set<string>;toggle:(id:string)=>void;loading:boolean;error:string;header?:ReactNode;onAdd?:()=>void;onEdit?:(place:Place)=>void}) {
-  const [city, setCity] = useState("Tokyo");
-  const [category, setCategory] = useState("All");
-  const [selectedOnly, setSelectedOnly] = useState(false);
-  const [query, setQuery] = useState("");
-  const [focusedId, setFocusedId] = useState<string | null>(null);
-  const [detailsOpen, setDetailsOpen] = useState(false);
+export function PlacesExplorer({trip, selected, toggle, loading, error, header, onAdd, onEdit, renderEdit}: {trip:TripSnapshot|null;selected:Set<string>;toggle:(id:string)=>void;loading:boolean;error:string;header?:ReactNode;onAdd?:()=>void;onEdit?:(place:Place)=>void;renderEdit?:(place:Place,onClose:()=>void)=>ReactNode}) {
+  const search = useSearch({ strict: false });
+  const navigate = useNavigate();
+  const city = search.city ?? "Tokyo";
+  const recentCities = useRecentCities(trip?.trip.id ?? "preview", city);
+  const category = search.category ?? "All";
+  const selectedOnly = search.chosen === true;
+  const query = search.q ?? "";
+  const updateFilters = (patch: PlacesSearch, replace = false) => {
+    void navigate({ to: ".", search: previous => ({ ...previous, ...patch }), replace, resetScroll: false });
+  };
+  const focusedId = search.place ?? null;
+  const [editing, setEditing] = useState(false);
+  const drawer = usePlacesDrawer();
+  const lastCard = useRef<HTMLElement | null>(null);
+  const panel = useRef<HTMLElement>(null);
+  const openPlace = (id: string) => {
+    lastCard.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    updateFilters({ place: id });
+    drawer.open();
+  };
+  const closePlace = () => updateFilters({ place: undefined }, true);
+  useEffect(() => { setEditing(false); }, [focusedId]);
+  useEffect(() => {
+    if (editing) return;
+    if (focusedId) {
+      panel.current?.querySelector<HTMLButtonElement>('[aria-label="Back to places"]')?.focus();
+    } else {
+      lastCard.current?.focus({ preventScroll: true });
+    }
+  }, [focusedId, editing]);
   const cityList = useMemo(() => {
     if (!trip) return [];
     const cities = new Set(trip.places.map((place) => place.city).filter(Boolean));
@@ -113,51 +135,53 @@ export function PlacesExplorer({trip, selected, toggle, loading, error, header, 
     });
   }, [category, cityPlacesList, query, selected, selectedOnly]);
   const focused = trip?.places.find((place) => place.id === focusedId) || null;
-  const cardPosition = useCardPosition(!!focused);
   const stays = useMemo(() => buildRouteStops(trip), [trip]);
   const cityStatuses = useMemo(() => summarizeCityStops(stays), [stays]);
 
   const changeCity = (nextCity: string) => {
-    setCity(nextCity);
-    setCategory("All");
-    setSelectedOnly(false);
-    setQuery("");
-    setFocusedId(null);
+    updateFilters({ city: nextCity, category: undefined, chosen: undefined, q: undefined, place: undefined });
+    drawer.open();
   };
 
   const clearFilters = () => {
-    setCategory("All");
-    setSelectedOnly(false);
-    setQuery("");
+    updateFilters({ category: undefined, chosen: undefined, q: undefined });
   };
 
   useEffect(() => {
     if (!focusedId) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.target instanceof Element && event.target.closest("dialog")) return;
-      if (event.key === "Escape") setFocusedId(null);
+      if (event.key === "Escape") {
+        if (editing) setEditing(false);
+        else closePlace();
+      }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [focusedId]);
+  }, [focusedId, editing]);
 
   return (
     <><div className="new-preview d4-page" data-palette="journey" style={statusVariables}>
       {header ?? <PreviewNav active={4} />}
 
-      <div className="d4-workspace">
-        <aside className="d4-browse-panel">
+      <div className={`d4-workspace d4-drawer-workspace${drawer.collapsed ? " is-collapsed" : ""}`} ref={drawer.workspaceRef}>
+        <aside className="d4-browse-panel d4-drawer" ref={panel} style={drawer.style} data-snap={drawer.snap} aria-label="Places panel">
+          <button className="d4-sheet-handle" {...drawer.handle} aria-label="Resize places panel" aria-expanded={drawer.snap !== "collapsed"} aria-controls="places-panel-content">
+            <span className="d4-sheet-grip"/><span>{focused?.name ?? "Places"}</span>
+          </button>
+          <button className="d4-panel-toggle" onClick={drawer.toggle} aria-expanded={!drawer.collapsed} aria-controls="places-panel-content" aria-label={drawer.collapsed ? "Expand places panel" : "Collapse places panel"}>
+            {drawer.collapsed ? <ChevronRight size={18}/> : <ChevronLeft size={18}/>}
+          </button>
+          <div id="places-panel-content" className="d4-panel-content" inert={drawer.mobile ? drawer.snap === "collapsed" : drawer.collapsed}>
+          <div className="d4-browse-view" hidden={!!focusedId}>
           <div className="d4-browse-head">
             <div>
               <h1>Places</h1>
-              <p>
-                {trip ? `${trip.places.length} saved ideas` : "Loading places"}
-              </p>
             </div>
-            <div className="d4-head-actions"><span className="d4-selection-count">{selected.size} chosen</span>{onAdd && <button onClick={onAdd}>+ Add place</button>}</div>
+            <div className="d4-head-actions"><button className="d4-selection-count" aria-pressed={selectedOnly} aria-label={selectedOnly ? "Show all saved places" : "Show places added to trip"} title={selectedOnly ? "Show all saved places" : "Filter to places added to this trip"} onClick={() => updateFilters({chosen: selectedOnly ? undefined : true})}>Added to trip ({selected.size})</button>{onAdd && <button onClick={onAdd}>+ Add place</button>}</div>
           </div>
-          <div className="d4-city-tabs" role="tablist" aria-label="Browse city">
-            {CITIES.map((item) => {
+          <div className="d4-city-tabs" role="tablist" aria-label="Browse city" style={{gridTemplateColumns:`repeat(${recentCities.length + 1},minmax(0,1fr)) 62px`}}>
+            {["All", ...recentCities].map((item) => {
               const count = trip ? cityPlaces(trip, item).length : 0;
               return (
                 <button
@@ -166,6 +190,7 @@ export function PlacesExplorer({trip, selected, toggle, loading, error, header, 
                   role="tab"
                   aria-selected={city === item}
                   className={city === item ? "is-active" : ""}
+                  title={item}
                   onClick={() => changeCity(item)}
                 >
                   <span>{item}</span>
@@ -173,19 +198,18 @@ export function PlacesExplorer({trip, selected, toggle, loading, error, header, 
                 </button>
               );
             })}
-            <select className="d4-more-cities" aria-label="Browse other cities" value={CITIES.includes(city) ? "" : city} onChange={event => changeCity(event.target.value)}>
-              <option value="" disabled>More cities</option>
-              <option value="All">All cities</option>
+            <div className="d4-city-picker">
+            <span aria-hidden="true">More</span>
+            <ChevronDown size={16} aria-hidden="true"/>
+            <select className="d4-more-cities" aria-label="Browse other cities" title="Choose a city" value="" onChange={event => changeCity(event.target.value)}>
+              <option value="" disabled>Choose a city</option>
               {cityList.map(item => <option key={item} value={item}>{item}</option>)}
             </select>
+            </div>
           </div>
           <div className="d4-search-bar">
-            <select aria-label="Place selection" value={selectedOnly ? "chosen" : "all"} onChange={event => setSelectedOnly(event.target.value === "chosen")}>
-              <option value="all">All saved</option>
-              <option value="chosen">Chosen</option>
-            </select>
             <Search size={16} aria-hidden="true" />
-            <input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search places, food, ideas…" aria-label="Search saved places" />
+            <input type="search" value={query} onChange={event => updateFilters({ q: event.target.value || undefined }, true)} placeholder="Search places, food, ideas…" aria-label="Search saved places" />
           </div>
           <div className="d4-category-tabs" role="tablist" aria-label="Place category">
             {categories.map((item) => (
@@ -196,7 +220,7 @@ export function PlacesExplorer({trip, selected, toggle, loading, error, header, 
                 aria-selected={category === item}
                 data-category={item}
                 className={category === item ? "is-active" : ""}
-                onClick={() => setCategory(item)}
+                onClick={() => updateFilters({ category: item === "All" ? undefined : item })}
               >
                 {item}
               </button>
@@ -220,7 +244,7 @@ export function PlacesExplorer({trip, selected, toggle, loading, error, header, 
                     <button
                       type="button"
                       className="d4-card-view"
-                      onClick={() => setFocusedId(place.id)}
+                      onClick={() => openPlace(place.id)}
                       aria-label={`View ${place.name}`}
                     >
                       <PlacePhoto place={place} className="d4-card-photo" />
@@ -253,80 +277,32 @@ export function PlacesExplorer({trip, selected, toggle, loading, error, header, 
               <button type="button" onClick={clearFilters}>Clear filters</button>
             </div>
           )}
+          </div>
+          {focused && (editing && renderEdit ? renderEdit(focused, () => setEditing(false)) : <PlaceDetails
+            key={focused.id} embedded place={{...focused, selected:selected.has(focused.id)}}
+            onClose={closePlace} onToggleTrip={() => toggle(focused.id)}
+            onEdit={renderEdit ? () => setEditing(true) : onEdit ? () => onEdit(focused) : undefined}
+          />)}
+          {focusedId && !focused && !loading && <div className="d4-missing-place"><button onClick={closePlace}>Back to places</button><p>This place is no longer available.</p></div>}
+          </div>
         </aside>
 
-        <main className="d4-map-area" ref={cardPosition.areaRef}>
+        <main className="d4-map-area" style={{"--map-bottom-inset": `${drawer.bottomInset}px`, "--map-left-inset": `${drawer.leftInset}px`} as CSSProperties}>
           <DesignMap
             places={trip?.places || []}
             selected={selected}
             city={city}
             onCity={changeCity}
-            onPlace={(place) => setFocusedId(place.id)}
+            onPlace={(place) => openPlace(place.id)}
+            focusedPlaceId={focusedId ?? undefined}
+            bottomInset={drawer.bottomInset}
+            leftInset={drawer.leftInset}
             className="d4-map"
             routeStops={stays}
             cityStatuses={cityStatuses}
             palette="journey"
             showInformation={false}
           />
-          {focused && (
-            <aside className="d4-map-inspector" role="dialog" aria-label="Place preview" ref={cardPosition.cardRef} style={cardPosition.style}>
-              <button
-                type="button"
-                className="d4-inspector-close"
-                onClick={() => setFocusedId(null)}
-                aria-label="Close place preview"
-              >
-                <X size={16} />
-              </button>
-              <div className="d4-inspector-image">
-                <PlacePhoto place={focused} className="d4-inspector-photo" />
-                <button type="button" className="d4-inspector-drag" aria-label="Move place card"
-                  title="Drag photo to move. Use arrow keys when focused; Home to reset."
-                  data-dragging={cardPosition.dragging} {...cardPosition.handle} />
-              </div>
-              <div className="d4-inspector-content">
-                <span className="d4-inspector-area">{focused.area || focused.city}</span>
-                <h2>{focused.name}</h2>
-                <p className="d4-inspector-description">
-                  {placeFullDescription(focused)}
-                </p>
-                <div className="d4-inspector-meta">
-                  <span>{focused.category || "Place"}</span>
-                  <span>
-                    <Clock3 size={13} />
-                    {focused.durationMinutes
-                      ? `${focused.durationMinutes} min`
-                      : focused.durationText || "Time unknown"}
-                  </span>
-                  <nav className="d4-inspector-sources" aria-label="Place sources">
-                    {[
-                      [focused.sourceUrl, "Source"],
-                      [focused.googleMapsUrl, "Maps"],
-                      [focused.instagramUrl, "Instagram"],
-                    ].map(([url, label]) => url && (
-                      <a key={label} href={url} target="_blank" rel="noreferrer">
-                        {label} <ExternalLink size={12} />
-                      </a>
-                    ))}
-                  </nav>
-                  {focused.reservation && <span>Reservation: {focused.reservation}</span>}
-                  {focused.openingHours && <span>{focused.openingHours}</span>}
-                </div>
-                <div className="d4-inspector-actions">
-                  <button type="button" className="d4-view-details" onClick={() => setDetailsOpen(true)}>Details</button>
-                  {onEdit && <button className="d4-edit-place" onClick={() => onEdit(focused)}>Edit</button>}
-                  <button
-                    type="button"
-                    className={`d4-inspector-select${selected.has(focused.id) ? " is-selected" : ""}`}
-                    onClick={() => toggle(focused.id)}
-                    aria-pressed={selected.has(focused.id)}
-                  >
-                    {selected.has(focused.id) ? <><Check size={14} /> Chosen</> : "Choose for trip"}
-                  </button>
-                </div>
-              </div>
-            </aside>
-          )}
         </main>
       </div>
 
@@ -363,12 +339,6 @@ export function PlacesExplorer({trip, selected, toggle, loading, error, header, 
         </div>
       </footer>
     </div>
-    {detailsOpen && focused && <PlaceDetails
-      key={focused.id}
-      place={{...focused, selected:selected.has(focused.id)}}
-      onClose={() => setDetailsOpen(false)}
-      onEdit={onEdit ? () => {setDetailsOpen(false); onEdit(focused);} : undefined}
-    />}
     </>
   );
 }

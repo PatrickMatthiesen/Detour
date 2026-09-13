@@ -1,0 +1,53 @@
+.d4-drawer-workspace {position:relative;}
+.d4-drawer-workspace .d4-map-area {position:absolute;inset:0;}
+.d4-drawer-workspace .dk-map-key {left:calc(var(--map-left-inset) + 8px);}
+.d4-drawer-workspace.is-collapsed {grid-template-columns:0 minmax(0,1fr);}
+.d4-drawer-workspace .d4-drawer {padding:0;min-width:0;}
+.d4-panel-content {height:100%;min-height:0;overflow:hidden;display:flex;flex-direction:column;}
+.d4-browse-view {display:flex;flex-direction:column;min-height:0;height:100%;padding:18px 16px 12px;}
+.d4-browse-view[hidden] {display:none;}
+.d4-panel-toggle {position:absolute;right:-27px;top:50%;width:27px;height:52px;display:grid;place-items:center;border:1px solid var(--d4-line);border-left:0;border-radius:0 8px 8px 0;background:#fffdf8;color:var(--d4-ink);z-index:3;}
+.d4-panel-toggle:focus-visible,.d4-sheet-handle:focus-visible {outline:2px solid var(--d4-blue);outline-offset:2px;}
+.d4-sheet-handle {display:none;}
+.d4-missing-place {padding:20px;}
+.d4-missing-place button {margin-bottom:20px;text-decoration:underline;}
+.d4-drawer-workspace.is-collapsed .d4-panel-content {visibility:hidden;}
+@media(max-width:640px) {
+  .new-preview.d4-page {height:100dvh;min-height:0;}
+  .d4-drawer-workspace,.d4-drawer-workspace.is-collapsed {display:block;overflow:hidden;}
+  .d4-drawer-workspace .d4-map-area {position:absolute;inset:0;}
+  .d4-drawer-workspace .maplibregl-ctrl-bottom-right,.d4-drawer-workspace .maplibregl-ctrl-bottom-left {bottom:var(--map-bottom-inset);}
+  .d4-drawer-workspace .d4-drawer {position:absolute;bottom:0;left:0;right:0;height:var(--sheet-height);border:1px solid var(--d4-line);border-bottom:0;border-radius:16px 16px 0 0;box-shadow:0 -3px 14px #263b5918;z-index:3;}
+  .d4-drawer-workspace.is-collapsed .d4-panel-content {visibility:visible;}
+  .d4-panel-toggle {display:none;}
+  .d4-sheet-handle {display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;width:100%;height:52px;flex-shrink:0;border:0;background:transparent;color:var(--d4-ink);touch-action:none;cursor:ns-resize;user-select:none;padding:7px 16px;font:inherit;font-size:13px;}
+  .d4-sheet-handle > span:last-child {max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .d4-sheet-grip {display:block;width:34px;height:4px;border-radius:4px;background:#9ba7a4;flex-shrink:0;}
+  .d4-panel-content {height:auto;flex:1;}
+  .d4-drawer[data-snap="collapsed"] .d4-panel-content {visibility:hidden;}
+  .d4-browse-view {padding:0 12px 8px;overflow-y:auto;overscroll-behavior:contain;}
+  .d4-browse-view .d4-card-grid {overflow:visible;flex-shrink:0;}
+  .d4-page .d4-stays {padding:6px 10px;}
+  .d4-page .d4-stays-list {display:flex;overflow-x:auto;}
+  .d4-page .d4-stay {flex:0 0 105px;}
+}
+
+@media(max-width:380px) {
+  .d4-city-tabs {grid-template-columns:repeat(4,minmax(0,1fr)) 32px;}
+  .d4-city-tabs button {flex-direction:column;align-items:flex-start;gap:3px;}
+  .d4-more-cities {font-size:12px;}
+}
+
+.d4-city-tabs button {min-width:0;gap:5px;}
+.d4-city-tabs button span {min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.d4-city-tabs button small {flex-shrink:0;}
+.d4-city-picker {position:relative;align-self:start;height:30px;}
+.d4-city-picker > span {position:absolute;left:3px;top:2px;pointer-events:none;color:var(--d4-muted);font-size:12px;}
+.d4-city-picker > svg {position:absolute;right:3px;top:3px;pointer-events:none;color:var(--d4-muted);}
+.d4-city-picker .d4-more-cities {position:absolute;inset:0;width:100%;height:100%;padding:0;appearance:none;color:transparent;cursor:pointer;border-radius:4px;}
+.d4-city-picker .d4-more-cities option {color:#30383b;background:#fffdf8;}
+.d4-city-picker .d4-more-cities:focus-visible {outline:2px solid var(--d4-blue);outline-offset:1px;}
+.d4-page .d4-selection-count {cursor:pointer;}
+.d4-page .d4-selection-count[aria-pressed="true"] {background:var(--d4-blue);color:white;border-color:var(--d4-blue);}
+.d4-page .d4-selection-count:focus-visible {outline:2px solid var(--d4-blue);outline-offset:2px;}
+.d4-search-bar > svg {position:absolute;left:12px;top:50%;transform:translateY(-50%);pointer-events:none;}
