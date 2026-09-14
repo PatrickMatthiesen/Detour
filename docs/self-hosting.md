@@ -43,7 +43,10 @@ contains them. A name-only `maps/search/?api=1&query=...` URL needs Google Place
 Text Search (New), so the deployment can resolve the place before saving it. The
 lookup sends the query to Google and keeps the place ID and coordinates in the
 application's short-lived coordinate cache. Detour does not create or modify
-anything in Google Maps.
+anything in Google Maps. Ambiguous searches return candidate names, addresses, IDs,
+and coordinates to the caller. Explicit Google Place IDs use
+[Place Details (New)](https://developers.google.com/maps/documentation/places/web-service/place-details)
+with an `id,location` field mask, using the same backend key and coordinate cache.
 
 The Maps credential is separate from the Google sign-in OAuth client. Enable
 billing and Places API (New) in the same Google Cloud project if convenient, then

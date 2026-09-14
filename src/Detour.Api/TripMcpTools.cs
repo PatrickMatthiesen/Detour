@@ -43,7 +43,14 @@ public sealed class TripMcpTools(TripService service, TripItemEditor editor)
     }
 
     [McpServerTool(ReadOnly = false, Destructive = true, OpenWorld = true, Idempotent = true, UseStructuredContent = true)]
-    [Description(PhotoInstructions + " Place library. Required on create: name, city and a map location. Supply a Google Maps link to resolve coordinates automatically, or verified latitude and longitude together. Short Maps links are expanded. Name-only maps/search URLs use Google Places Text Search when configured; ambiguous searches fail and need a more specific query or verified coordinates. Map-view centers are ignored. Updating an existing place with missing coordinates retries its Maps link, even with no field changes. Never guess coordinates. selected marks trip interest; use edit_activity to schedule. Preserve sourceUrl. changes.photo imports a public image URL with optional attribution; omit photo to preserve it, or use photo: null or clearFields photo to remove it. Place fields and photo commit together. Create, update or delete only this record. Read first; on conflict re-read and reassess instead of blindly retrying. Reuse the same ID when retrying a create; never generate a second ID after an uncertain response.")]
+    [Description("Create, update or delete up to 50 independent places with one expectedVersion and one commit. mode atomic saves nothing if any operation fails; best_effort commits valid operations together. Any version conflict saves nothing in either mode: re-read and reassess. IDs must be unique within the batch. photoFailurePolicy save_without_new_photo saves valid fields while preserving any existing photo and reports a warning; fail_operation rejects that operation. Inspect committed and every result: success false may still save records. Retry failed creates with the same ID; retry succeeded_with_warning records using photo-only updates. Resubmit not_committed operations only after fixing errors or reassessing conflicts. " + PhotoInstructions)]
+    public Task<BulkPlaceResult> EditPlaces(long expectedVersion, PlaceEditOperation[] operations,
+        BulkEditMode mode = BulkEditMode.atomic, PhotoFailurePolicy photoFailurePolicy = PhotoFailurePolicy.fail_operation,
+        CancellationToken cancellationToken = default)
+        => new BulkPlaceEditor(service).EditAsync(expectedVersion, operations, mode, photoFailurePolicy, cancellationToken);
+
+    [McpServerTool(ReadOnly = false, Destructive = true, OpenWorld = true, Idempotent = true, UseStructuredContent = true)]
+    [Description(PhotoInstructions + " Place library. Required on create: name, city and a map location. Supply a Google Maps link to resolve coordinates automatically, or verified latitude and longitude together. Short Maps links are expanded. Name-only maps/search URLs use Google Places Text Search when configured; ambiguous searches return candidate matches; select one using changes.googlePlaceId. Map-view centers are ignored. Updating an existing place with missing coordinates retries its Maps link, even with no field changes. Never guess coordinates. selected marks trip interest; use edit_activity to schedule. Preserve sourceUrl. To add or replace only a photo, use operation update with the existing ID, expectedVersion, and only changes.photo; other fields are preserved. changes.photo imports a public image URL with optional attribution; omit photo to preserve it, or use photo: null or clearFields photo to remove it. Place fields and photo commit together. Create, update or delete only this record. Read first; on conflict re-read and reassess instead of blindly retrying. Reuse the same ID when retrying a create; never generate a second ID after an uncertain response.")]
     public Task<ItemEditResult> EditPlace(
         EditOperation operation,
         [Description("Existing record ID for update/delete; new stable unique ID for create. Never update by name.")] string id,
@@ -130,6 +137,11 @@ public sealed class TripMcpTools(TripService service, TripItemEditor editor)
     private async Task<ItemEditResult> Edit<T>(string collection, EditOperation operation, string id, long version, T? changes, string[]? clearFields, CancellationToken ct)
     {
         var patch = changes is null ? new JsonObject() : JsonSerializer.SerializeToNode(changes, PatchOptions)!.AsObject();
+        if (collection == "places")
+        {
+            try { PlacePatch.NormalizeGooglePlaceId(patch); }
+            catch (ArgumentException ex) { return new(false, (await service.GetSnapshotAsync(ct)).Version, "invalid_changes", ex.Message, null); }
+        }
         foreach (var field in clearFields ?? [])
         {
             if (string.IsNullOrWhiteSpace(field) || patch.ContainsKey(field))
@@ -140,7 +152,7 @@ public sealed class TripMcpTools(TripService service, TripItemEditor editor)
     }
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-    private static readonly JsonSerializerOptions PatchOptions = CreatePatchOptions();
+    internal static readonly JsonSerializerOptions PatchOptions = CreatePatchOptions();
 
     private static JsonSerializerOptions CreatePatchOptions()
     {

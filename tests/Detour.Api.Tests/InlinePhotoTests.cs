@@ -275,6 +275,211 @@ public sealed class InlinePhotoTests
         Assert.Empty(db.PhotoObjectDeletions);
     }
 
+    [Theory]
+    [InlineData(BulkEditMode.atomic, false)]
+    [InlineData(BulkEditMode.best_effort, true)]
+    public async Task Bulk_validation_commits_once_or_rolls_back(BulkEditMode mode, bool committed)
+    {
+        await using var db = CreateDb();
+        var (service, tools) = CreateTools(db, new(), new());
+        var initial = await service.GetSnapshotAsync();
+        var result = await tools.EditPlaces(initial.Version,
+            [NewPlace("one"), NewPlace("bad", new PlaceChanges { Name = "Missing location", City = "Tokyo" }), NewPlace("two")], mode);
+        Assert.Equal(committed, result.Committed);
+        Assert.False(result.Success);
+        Assert.Equal(initial.Version + (committed ? 1 : 0), result.Version);
+        Assert.Equal("failed", result.Results[1].Status);
+        Assert.Equal("validation_failed", result.Results[1].Error!.Code);
+        Assert.Equal(committed ? "succeeded" : "not_committed", result.Results[0].Status);
+        var saved = await service.GetSnapshotAsync();
+        Assert.Equal(committed ? 2 : 0, saved.Places.Count);
+        if (committed)
+        {
+            Assert.Equal("one", result.Results[0].Item!.Id);
+            var retry = await tools.EditPlaces(result.Version, [NewPlace("bad")]);
+            Assert.True(retry.Success);
+            Assert.Equal(3, (await service.GetSnapshotAsync()).Places.Count);
+        }
+    }
+
+    [Theory]
+    [InlineData(BulkEditMode.atomic, PhotoFailurePolicy.fail_operation, false, 0)]
+    [InlineData(BulkEditMode.best_effort, PhotoFailurePolicy.fail_operation, true, 1)]
+    [InlineData(BulkEditMode.atomic, PhotoFailurePolicy.save_without_new_photo, true, 2)]
+    [InlineData(BulkEditMode.best_effort, PhotoFailurePolicy.save_without_new_photo, true, 2)]
+    public async Task Bulk_photo_policy_is_independent_of_batch_mode(BulkEditMode mode, PhotoFailurePolicy policy, bool committed, int count)
+    {
+        await using var db = CreateDb();
+        var http = new PhotoHttpClientFactory { FailRequests = true };
+        var (service, tools) = CreateTools(db, http, new());
+        var initial = await service.GetSnapshotAsync();
+        var result = await tools.EditPlaces(initial.Version, [NewPlace("one"), NewPlace("photo", PhotoChanges())], mode, policy);
+        Assert.Equal(committed, result.Committed);
+        Assert.Equal(count, (await service.GetSnapshotAsync()).Places.Count);
+        Assert.Equal(initial.Version + (committed ? 1 : 0), result.Version);
+        var outcome = result.Results[1];
+        Assert.Equal("http_502", (outcome.PhotoError ?? outcome.Error)!.Code);
+        if (policy == PhotoFailurePolicy.save_without_new_photo)
+        {
+            Assert.Equal("succeeded_with_warning", outcome.Status);
+            Assert.NotNull(outcome.Item);
+            http.FailRequests = false;
+            var retry = await tools.EditPlace(EditOperation.update, "photo", result.Version,
+                new PlaceChanges { Photo = new PhotoInput { Url = ImageUrl } });
+            Assert.True(retry.Success);
+            Assert.NotNull(Assert.IsType<Place>(retry.Item).Photo);
+        }
+    }
+
+    [Fact]
+    public async Task Bulk_photo_warning_preserves_old_photo_and_saves_fields()
+    {
+        await using var db = CreateDb();
+        var http = new PhotoHttpClientFactory();
+        var (service, tools) = CreateTools(db, http, new());
+        var created = await tools.EditPlace(EditOperation.create, "one", (await service.GetSnapshotAsync()).Version, PhotoChanges());
+        var original = Assert.IsType<Place>(created.Item).Photo!;
+        http.FailRequests = true;
+        var result = await tools.EditPlaces(created.Version,
+            [new(EditOperation.update, "one", new PlaceChanges { Name = "Renamed", Photo = new PhotoInput { Url = ReplacementUrl } })],
+            photoFailurePolicy: PhotoFailurePolicy.save_without_new_photo);
+        Assert.True(result.Committed);
+        var saved = Assert.Single((await service.GetSnapshotAsync()).Places);
+        Assert.Equal("Renamed", saved.Name);
+        Assert.Equal(original.Id, saved.Photo!.Id);
+        Assert.Equal("http_502", result.Results[0].PhotoError!.Code);
+    }
+
+    [Theory]
+    [InlineData(BulkEditMode.atomic)]
+    [InlineData(BulkEditMode.best_effort)]
+    public async Task Bulk_conflict_during_photo_staging_commits_no_operations(BulkEditMode mode)
+    {
+        await using var db = CreateDb();
+        var http = new PhotoHttpClientFactory();
+        var store = new FakePhotoStore();
+        var (service, tools) = CreateTools(db, http, store);
+        var initial = await service.GetSnapshotAsync();
+        http.BeforeRequest = async () =>
+        {
+            http.BeforeRequest = null;
+            var concurrent = await tools.EditTask(EditOperation.create, "concurrent", initial.Version,
+                new TripTaskChanges { Title = "Concurrent edit", Scope = "before" });
+            Assert.True(concurrent.Success);
+        };
+        var result = await tools.EditPlaces(initial.Version, [NewPlace("one"), NewPlace("photo", PhotoChanges())], mode);
+        Assert.False(result.Committed);
+        Assert.Equal("version_conflict", result.Error);
+        Assert.Equal(initial.Version + 1, result.Version);
+        Assert.All(result.Results, x => Assert.Equal("not_committed", x.Status));
+        var saved = await service.GetSnapshotAsync();
+        Assert.Empty(saved.Places);
+        Assert.Single(saved.Tasks);
+        Assert.Empty(db.PlacePhotos);
+        Assert.Single(db.PhotoObjectDeletions); // Staged object remains queued for cleanup.
+    }
+
+    [Fact]
+    public async Task Bulk_rejects_duplicate_ids_and_stale_version_before_import()
+    {
+        await using var db = CreateDb();
+        var http = new PhotoHttpClientFactory();
+        var (service, tools) = CreateTools(db, http, new());
+        var initial = await service.GetSnapshotAsync();
+        Assert.Equal("invalid_batch", (await tools.EditPlaces(initial.Version, [NewPlace("one"), NewPlace("one")])).Error);
+        Assert.Equal("version_conflict", (await tools.EditPlaces(initial.Version - 1, [NewPlace("one", PhotoChanges())])).Error);
+        Assert.Empty(http.Requests);
+        Assert.Empty((await service.GetSnapshotAsync()).Places);
+    }
+
+    [Fact]
+    public async Task Bulk_updates_clear_fields_and_deletes_respect_references()
+    {
+        await using var db = CreateDb();
+        var (service, tools) = CreateTools(db, new(), new());
+        var created = await tools.EditPlaces((await service.GetSnapshotAsync()).Version,
+            [NewPlace("one"), NewPlace("two", new PlaceChanges { Name = "Two", City = "Tokyo", Latitude = 35, Longitude = 139, Area = "Old", Selected = true })]);
+        Assert.True(created.Success);
+        var activity = await tools.EditActivity(EditOperation.create, "visit", created.Version,
+            new ActivityChanges { PlaceId = "one", Date = new DateOnly(2026, 9, 13) });
+        Assert.True(activity.Success);
+        var edited = await tools.EditPlaces(activity.Version,
+            [new(EditOperation.delete, "one"), new(EditOperation.update, "two", new PlaceChanges { Selected = false }, ["area"]), NewPlace("three")],
+            BulkEditMode.best_effort);
+        Assert.True(edited.Committed);
+        Assert.Equal("referenced", edited.Results[0].Error!.Code);
+        Assert.NotNull(edited.Results[0].Item);
+        Assert.False(edited.Results[1].Item!.Selected);
+        Assert.Null(edited.Results[1].Item!.Area);
+        Assert.Equal("Two", edited.Results[1].Item!.Name);
+        var deleted = await tools.EditPlaces(edited.Version, [new(EditOperation.delete, "three")]);
+        Assert.True(deleted.Success);
+        Assert.Null(deleted.Results[0].Item);
+        var allFailed = await tools.EditPlaces(deleted.Version, [new(EditOperation.delete, "one")], BulkEditMode.best_effort);
+        Assert.False(allFailed.Committed);
+        Assert.Equal(deleted.Version, allFailed.Version);
+        Assert.Equal(2, (await service.GetSnapshotAsync()).Places.Count);
+    }
+
+    [Theory]
+    [InlineData("http_403")]
+    [InlineData("unsupported_content_type")]
+    [InlineData("too_large")]
+    [InlineData("invalid_image")]
+    public async Task Photo_import_returns_actionable_diagnostic_without_upstream_body(string code)
+    {
+        await using var db = CreateDb();
+        var http = new PhotoHttpClientFactory
+        {
+            ResponseOverride = () =>
+            {
+                var response = new HttpResponseMessage(code == "http_403" ? HttpStatusCode.Forbidden : HttpStatusCode.OK)
+                { Content = new StringContent("secret upstream details") };
+                response.Content.Headers.ContentType = new(code == "unsupported_content_type" ? "text/html" : "image/jpeg");
+                if (code == "too_large") response.Content.Headers.ContentLength = PhotoDownloader.MaxDownloadBytes + 1;
+                return response;
+            }
+        };
+        var (service, tools) = CreateTools(db, http, new());
+        var initial = await service.GetSnapshotAsync();
+        var result = await tools.EditPlace(EditOperation.create, "one", initial.Version, PhotoChanges());
+        Assert.False(result.Success);
+        Assert.Equal(code, result.Details!.Code);
+        Assert.DoesNotContain("secret upstream details", result.Message);
+        Assert.Equal(initial.Version, (await service.GetSnapshotAsync()).Version);
+        Assert.Empty((await service.GetSnapshotAsync()).Places);
+    }
+
+    [Fact]
+    public async Task Photo_failure_cannot_remove_a_stays_last_mapped_place()
+    {
+        await using var db = CreateDb();
+        var http = new PhotoHttpClientFactory { FailRequests = true };
+        var (service, tools) = CreateTools(db, http, new());
+        var city = "Test village with no built-in center";
+        var initial = await service.GetSnapshotAsync();
+        var place = await tools.EditPlace(EditOperation.create, "old", initial.Version,
+            new PlaceChanges { Name = "Old", City = city, Latitude = 35, Longitude = 139 });
+        Assert.True(place.Success);
+        var stay = await tools.EditStay(EditOperation.create, "stay", place.Version,
+            new StayChanges { City = city, CheckIn = new DateOnly(2026, 9, 13), CheckOut = new DateOnly(2026, 9, 14) });
+        Assert.True(stay.Success, stay.Message);
+        var replacement = PhotoChanges();
+        replacement.City = city;
+        var result = await tools.EditPlaces(stay.Version,
+            [new(EditOperation.delete, "old"), NewPlace("replacement", replacement)], BulkEditMode.best_effort);
+        Assert.False(result.Committed);
+        Assert.Contains("lose its map location", result.Message);
+        var saved = await service.GetSnapshotAsync();
+        Assert.Equal(stay.Version, saved.Version);
+        Assert.Equal("old", Assert.Single(saved.Places).Id);
+    }
+
+    private static PlaceEditOperation NewPlace(string id, PlaceChanges? changes = null) => new(EditOperation.create, id,
+        changes ?? new PlaceChanges { Name = id, City = "Tokyo", Latitude = 35, Longitude = 139 });
+    private static PlaceChanges PhotoChanges() => new()
+        { Name = "Photo", City = "Tokyo", Latitude = 35, Longitude = 139, Photo = new PhotoInput { Url = ImageUrl } };
+
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     private static TripDbContext CreateDb() => new(
@@ -304,22 +509,26 @@ public sealed class InlinePhotoTests
 
         public List<string> Requests { get; } = [];
         public bool FailRequests { get; set; }
+        public Func<Task>? BeforeRequest { get; set; }
+        public Func<HttpResponseMessage>? ResponseOverride { get; set; }
 
         public HttpClient CreateClient(string name) => new(new Handler(this));
 
         private sealed class Handler(PhotoHttpClientFactory owner) : HttpMessageHandler
         {
-            protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
             {
+                if (owner.BeforeRequest is { } callback) await callback();
                 owner.Requests.Add(request.RequestUri!.ToString());
+                if (owner.ResponseOverride is { } respond) return respond();
                 if (owner.FailRequests)
-                    return Task.FromResult(new HttpResponseMessage(HttpStatusCode.BadGateway));
+                    return new HttpResponseMessage(HttpStatusCode.BadGateway);
                 var response = new HttpResponseMessage(HttpStatusCode.OK)
                 {
                     Content = new ByteArrayContent(Image)
                 };
                 response.Content.Headers.ContentType = new("image/png");
-                return Task.FromResult(response);
+                return response;
             }
         }
     }

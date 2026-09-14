@@ -9,7 +9,7 @@ namespace Detour.Api;
 public sealed class GooglePlacesClient(HttpClient client, IConfiguration configuration)
 {
     private static readonly Uri SearchEndpoint = new("https://places.googleapis.com/v1/places:searchText");
-    private const string FieldMask = "places.id,places.location,nextPageToken";
+    private const string FieldMask = "places.id,places.displayName,places.formattedAddress,places.location,nextPageToken";
     private const int PageSize = 2;
     private const int MaxResponseBytes = 64 * 1024;
     private const int MaxQueryLength = 2048;
@@ -17,24 +17,30 @@ public sealed class GooglePlacesClient(HttpClient client, IConfiguration configu
     private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(8);
 
     public async Task<GooglePlacesResult> SearchAsync(string query, CancellationToken cancellationToken = default)
+        => await ResolveAsync(query, false, cancellationToken);
+
+    public Task<GooglePlacesResult> GetAsync(string placeId, CancellationToken cancellationToken = default)
+        => ResolveAsync(placeId.StartsWith("places/", StringComparison.Ordinal) ? placeId[7..] : placeId, true, cancellationToken);
+
+    private async Task<GooglePlacesResult> ResolveAsync(string query, bool byId, CancellationToken cancellationToken)
     {
         var apiKey = configuration["GoogleMaps:ApiKey"];
         if (string.IsNullOrWhiteSpace(apiKey))
             throw Failure("Google Places lookup is not configured. Set GoogleMaps:ApiKey.");
         if (string.IsNullOrWhiteSpace(query))
             throw new ArgumentException("A place search query is required.", nameof(query));
-        if (query.Length > MaxQueryLength)
+        if (query.Length > (byId ? MaxPlaceIdLength : MaxQueryLength))
             throw new ArgumentException("The place search query is too long. Provide a specific Google Maps link or verified coordinates.", nameof(query));
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(RequestTimeout);
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, SearchEndpoint)
+        using var request = new HttpRequestMessage(byId ? HttpMethod.Get : HttpMethod.Post, byId ? new Uri("https://places.googleapis.com/v1/places/" + Uri.EscapeDataString(query)) : SearchEndpoint)
         {
-            Content = JsonContent.Create(new { textQuery = query, pageSize = PageSize })
+            Content = byId ? null : JsonContent.Create(new { textQuery = query, pageSize = PageSize })
         };
         request.Headers.TryAddWithoutValidation("X-Goog-Api-Key", apiKey);
-        request.Headers.TryAddWithoutValidation("X-Goog-FieldMask", FieldMask);
+        request.Headers.TryAddWithoutValidation("X-Goog-FieldMask", byId ? "id,location" : FieldMask);
 
         HttpResponseMessage response;
         try
@@ -58,11 +64,17 @@ public sealed class GooglePlacesClient(HttpClient client, IConfiguration configu
             try
             {
                 await response.Content.LoadIntoBufferAsync(MaxResponseBytes, timeout.Token);
-                var payload = await response.Content.ReadFromJsonAsync<SearchResponse>(cancellationToken: timeout.Token);
+                var payload = byId
+                    ? new SearchResponse([await response.Content.ReadFromJsonAsync<PlaceResponse>(cancellationToken: timeout.Token)], null)
+                    : await response.Content.ReadFromJsonAsync<SearchResponse>(cancellationToken: timeout.Token);
                 if (payload?.Places is not { } places || places.Count == 0)
                     throw Failure("Google Places returned no matching place. Provide a specific Google Maps link or verified coordinates.");
                 if (places.Count != 1 || !string.IsNullOrWhiteSpace(payload.NextPageToken))
-                    throw Failure("Google Places returned multiple possible places. Provide a specific Google Maps link or verified coordinates.");
+                    throw new LocationAmbiguousException("Google Places returned multiple possible places. Select a candidate using googlePlaceId, or provide a specific Google Maps link or verified coordinates.",
+                        places.Where(p => !string.IsNullOrWhiteSpace(p?.Id) && p.Id.Length <= MaxPlaceIdLength
+                            && GoogleMapsCoordinates.IsValid(p.Location?.Latitude, p.Location?.Longitude))
+                        .Take(PageSize).Select(p => new LocationCandidate(p!.Id!, p.DisplayName?.Text, p.FormattedAddress,
+                            p.Location!.Latitude!.Value, p.Location.Longitude!.Value)).ToArray());
 
                 var place = places[0];
                 if (string.IsNullOrWhiteSpace(place?.Id) || place.Id.Length > MaxPlaceIdLength
@@ -71,6 +83,7 @@ public sealed class GooglePlacesClient(HttpClient client, IConfiguration configu
                     || !GoogleMapsCoordinates.IsValid(latitude, longitude))
                     throw Failure("Google Places returned an incomplete place. Provide a specific Google Maps link or verified coordinates.");
 
+                if (byId && place.Id != query) throw Failure("Google Places returned a different place ID. Check the selected place.");
                 return new GooglePlacesResult(place.Id, latitude, longitude);
             }
             catch (JsonException)
@@ -107,7 +120,11 @@ public sealed class GooglePlacesClient(HttpClient client, IConfiguration configu
 
     private sealed record PlaceResponse(
         [property: JsonPropertyName("id")] string? Id,
-        [property: JsonPropertyName("location")] LocationResponse? Location);
+        [property: JsonPropertyName("location")] LocationResponse? Location,
+        [property: JsonPropertyName("displayName")] DisplayNameResponse? DisplayName,
+        [property: JsonPropertyName("formattedAddress")] string? FormattedAddress);
+
+    private sealed record DisplayNameResponse([property: JsonPropertyName("text")] string? Text);
 
     private sealed record LocationResponse(
         [property: JsonPropertyName("latitude")] double? Latitude,
@@ -115,3 +132,9 @@ public sealed class GooglePlacesClient(HttpClient client, IConfiguration configu
 }
 
 public sealed record GooglePlacesResult(string GooglePlaceId, double Latitude, double Longitude);
+
+public sealed record LocationCandidate(string PlaceId, string? Name, string? FormattedAddress, double Lat, double Lng);
+public sealed class LocationAmbiguousException(string message, IReadOnlyList<LocationCandidate> candidates) : ArgumentException(message)
+{
+    public IReadOnlyList<LocationCandidate> Candidates => candidates;
+}

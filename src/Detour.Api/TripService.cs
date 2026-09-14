@@ -28,11 +28,17 @@ public sealed class TripService(TripDbContext db, OwnerAccessor ownerAccessor, P
         return loaded;
     }
 
-    public async Task<ReplaceResult> ReplaceAsync(TripSnapshot input, long expectedVersion, CancellationToken cancellationToken = default)
+    public Task<ReplaceResult> ReplaceAsync(TripSnapshot input, long expectedVersion, CancellationToken cancellationToken = default)
+        => ReplaceCoreAsync(input, expectedVersion, null, cancellationToken);
+
+    internal Task<ReplaceResult> ReplaceBatchAsync(TripSnapshot input, long expectedVersion, BulkPreparation batch, CancellationToken ct)
+        => ReplaceCoreAsync(input, expectedVersion, batch, ct);
+
+    private async Task<ReplaceResult> ReplaceCoreAsync(TripSnapshot input, long expectedVersion, BulkPreparation? batch, CancellationToken cancellationToken)
     {
         if (expectedVersion < 0 || input.Trip is null || input.Trip.StartDate > input.Trip.EndDate) return new ReplaceResult.Invalid();
         var owner = ownerAccessor.OwnerId;
-        try { ValidateAndNormalize(input); }
+        try { if (batch is null) ValidateAndNormalize(input); }
         catch (ArgumentException exception) { return new ReplaceResult.Invalid(exception.Message); }
         var before = await db.Trips.AsNoTracking().SingleOrDefaultAsync(x => x.OwnerId == owner, cancellationToken);
         if (before is null) return new ReplaceResult.Conflict(NewSnapshot());
@@ -46,37 +52,100 @@ public sealed class TripService(TripDbContext db, OwnerAccessor ownerAccessor, P
             return new ReplaceResult.Conflict(current);
         }
         var previous = Read(before);
-        Dictionary<string, GooglePlaceLocationRow> locations;
+        await EnrichPhotosAsync(previous, owner, cancellationToken);
+        Dictionary<string, GooglePlaceLocationRow> locations = new();
+        var batchCache = batch is null ? null : await db.GooglePlaceLocations.AsNoTracking().Where(x => x.OwnerId == owner).ToDictionaryAsync(x => x.PlaceId, cancellationToken);
         try
         {
-            locations = await NormalizeCoordinatesAsync(input, previous, owner, cancellationToken);
+            if (batch is null) locations = await NormalizeCoordinatesAsync(input, previous, owner, cancellationToken);
+            else
+            {
+                var pendingIds = batch.Results.Where(x => x.Status == "pending").Select(x => x.Id).ToHashSet(StringComparer.Ordinal);
+                var unchanged = new TripSnapshot { Places = input.Places.Where(x => !pendingIds.Contains(x.Id)).ToList() };
+                ValidateAndNormalize(unchanged);
+                locations = await NormalizeCoordinatesAsync(unchanged, previous, owner, cancellationToken, batchCache);
+                foreach (var place in input.Places.Where(x => pendingIds.Contains(x.Id)).ToArray())
+                {
+                    try
+                    {
+                        var single = new TripSnapshot { Places = [place] };
+                        ValidateAndNormalize(single);
+                        var resolved = await NormalizeCoordinatesAsync(single, previous, owner, cancellationToken, batchCache);
+                        foreach (var pair in resolved) locations[pair.Key] = pair.Value;
+                    }
+                    catch (ArgumentException ex)
+                    {
+                        // Unchanged records must not be attributed to an unrelated operation.
+                        if (!batch.Results.Any(x => x.Id == place.Id && x.Status == "pending")) throw;
+                        batch.Fail(place.Id, LocationDiagnostic(ex));
+                        Restore(place.Id);
+                        if (previous.Places.Find(x => x.Id == place.Id) is { } old)
+                        {
+                            var retained = await NormalizeCoordinatesAsync(new TripSnapshot { Places = [old] }, previous, owner, cancellationToken, batchCache);
+                            foreach (var pair in retained) locations[pair.Key] = pair.Value;
+                        }
+                    }
+                }
+            }
             StayCityValidator.Validate(input, previous);
         }
-        catch (ArgumentException exception) { return new ReplaceResult.Invalid(exception.Message); }
+        catch (ArgumentException exception) { return new ReplaceResult.Invalid(exception.Message, LocationDiagnostic(exception)); }
+        if (batch is not null && batch.Mode == BulkEditMode.atomic && batch.Results.Any(x => x.Status == "failed"))
+            return new ReplaceResult.Invalid("batch_failed");
         var storedPhotos = await db.PlacePhotos.AsNoTracking().Where(x => x.OwnerId == owner).ToDictionaryAsync(x => x.PlaceId, cancellationToken);
         var staged = new Dictionary<string, PlacePhotoRow>();
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(TimeSpan.FromMinutes(2));
-        try
+        using var importTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        importTimeout.CancelAfter(TimeSpan.FromMinutes(2));
+        foreach (var place in input.Places.Where(x => x.PhotoSpecified && x.Photo is not null).ToArray())
         {
-            foreach (var place in input.Places.Where(x => x.PhotoSpecified && x.Photo is not null))
+            if (storedPhotos.TryGetValue(place.Id, out var stored) && place.Photo!.Url == ToDescriptor(stored).Url) continue;
+            try
             {
-                // The read model's private URL is a reference, never a download source.
-                if (storedPhotos.TryGetValue(place.Id, out var stored) && place.Photo!.Url == ToDescriptor(stored).Url) continue;
-                if (photoImports is null) return new ReplaceResult.PhotoFailed("Photo importing is not configured.");
-                staged.Add(place.Id, await photoImports.StageAsync(owner, place, timeout.Token));
+                if (photoImports is null) throw new PhotoStorageUnavailableException("Photo importing is not configured.");
+                staged.Add(place.Id, await photoImports.StageAsync(owner, place, importTimeout.Token));
+            }
+            catch (Exception ex) when (PhotoDiagnostics.IsExpected(ex) && !cancellationToken.IsCancellationRequested)
+            {
+                var detail = PhotoDiagnostics.From(ex);
+                if (batch is null) return new ReplaceResult.PhotoFailed(detail.Message, detail);
+                if (batch.PhotoPolicy == PhotoFailurePolicy.save_without_new_photo)
+                {
+                    place.Photo = stored is null ? null : ToDescriptor(stored);
+                    batch.Warn(place.Id, detail);
+                }
+                else
+                {
+                    batch.Fail(place.Id, detail);
+                    Restore(place.Id);
+                    locations.Remove(place.Id);
+                    if (previous.Places.Find(x => x.Id == place.Id) is { } old)
+                    {
+                        var retained = await NormalizeCoordinatesAsync(new TripSnapshot { Places = [old] }, previous, owner, cancellationToken, batchCache);
+                        foreach (var pair in retained) locations[pair.Key] = pair.Value;
+                    }
+                }
             }
         }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        if (batch is not null && (batch.Mode == BulkEditMode.atomic && batch.Results.Any(x => x.Status == "failed")
+            || batch.Results.All(x => x.Status == "failed"))) return new ReplaceResult.Invalid("batch_failed");
+        // Photo failures may have removed a replacement for a stay's last mapped place.
+        try
         {
-            return new ReplaceResult.PhotoFailed("Photo import timed out. The place and existing photo were not changed.");
+            ValidateAndNormalize(input);
+            StayCityValidator.Validate(input, previous);
         }
-        catch (Exception ex) when (ex is InvalidOperationException or HttpRequestException or TimeoutException or
-            SixLabors.ImageSharp.UnknownImageFormatException or SixLabors.ImageSharp.InvalidImageContentException or
-            PhotoStorageUnavailableException or Amazon.S3.AmazonS3Exception)
+        catch (ArgumentException ex) { return new ReplaceResult.Invalid(ex.Message, LocationDiagnostic(ex)); }
+        // Import timeout should not consume the independent commit budget in best-effort mode.
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromMinutes(2));
+
+        void Restore(string id)
         {
-            return new ReplaceResult.PhotoFailed("Could not import the photo. Check the image URL, format, size, and storage availability. The place and existing photo were not changed.");
+            var index = input.Places.FindIndex(x => x.Id == id);
+            if (previous.Places.Find(x => x.Id == id) is { } old && index >= 0) input.Places[index] = old;
+            else input.Places.RemoveAll(x => x.Id == id);
         }
+
         await using var transaction = db.Database.IsRelational() ? await db.Database.BeginTransactionAsync(timeout.Token) : null;
         var row = await LockTripAsync(db, owner, timeout.Token);
         if (row is null) return new ReplaceResult.Conflict(NewSnapshot());
@@ -229,9 +298,9 @@ public sealed class TripService(TripDbContext db, OwnerAccessor ownerAccessor, P
         return node.ToJsonString(JsonOptions);
     }
 
-    private async Task<Dictionary<string, GooglePlaceLocationRow>> NormalizeCoordinatesAsync(TripSnapshot input, TripSnapshot previous, string owner, CancellationToken ct)
+    private async Task<Dictionary<string, GooglePlaceLocationRow>> NormalizeCoordinatesAsync(TripSnapshot input, TripSnapshot previous, string owner, CancellationToken ct, Dictionary<string, GooglePlaceLocationRow>? cache = null)
     {
-        var cached = await db.GooglePlaceLocations.AsNoTracking().Where(x => x.OwnerId == owner).ToDictionaryAsync(x => x.PlaceId, ct);
+        var cached = cache ?? await db.GooglePlaceLocations.AsNoTracking().Where(x => x.OwnerId == owner).ToDictionaryAsync(x => x.PlaceId, ct);
         var retained = new Dictionary<string, GooglePlaceLocationRow>();
         foreach (var old in previous.Places)
             if (cached.TryGetValue(old.Id, out var stored) && stored.MapsUrl == old.GoogleMapsUrl)
@@ -314,7 +383,9 @@ public sealed class TripService(TripDbContext db, OwnerAccessor ownerAccessor, P
                 // Refresh only the same Google place. A changed search result needs user review.
                 try
                 {
-                    var resolved = await placesClient.SearchAsync(row.Query, ct);
+                    var resolved = row.Query.StartsWith("place_id:", StringComparison.Ordinal)
+                        ? await placesClient.GetAsync(row.GooglePlaceId, ct)
+                        : await placesClient.SearchAsync(row.Query, ct);
                     if (resolved.GooglePlaceId == row.GooglePlaceId)
                     {
                         row.Latitude = resolved.Latitude;
@@ -348,6 +419,10 @@ public sealed class TripService(TripDbContext db, OwnerAccessor ownerAccessor, P
         catch (DbUpdateConcurrencyException) { return false; }
         finally { entry.State = EntityState.Detached; }
     }
+
+    private static EditDiagnostic LocationDiagnostic(ArgumentException ex) => ex is LocationAmbiguousException ambiguous
+        ? new("ambiguous_location", ex.Message, ambiguous.Candidates)
+        : new("validation_failed", ex.Message);
 
     private static TripSnapshot NewSnapshot() => new() { Version = 1, Trip = new() };
 

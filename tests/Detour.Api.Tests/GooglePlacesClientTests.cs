@@ -9,6 +9,19 @@ namespace Detour.Api.Tests;
 public sealed class GooglePlacesClientTests
 {
     [Fact]
+    public async Task Place_id_uses_details_and_validates_identity()
+    {
+        using var handler = new RecordingHandler((request, _) =>
+        {
+            Assert.Equal(HttpMethod.Get, request.Method);
+            Assert.Equal("https://places.googleapis.com/v1/places/abc", request.RequestUri!.AbsoluteUri);
+            Assert.Equal("id,location", request.Headers.GetValues("X-Goog-FieldMask").Single());
+            return Task.FromResult(JsonResponse("""{"id":"abc","location":{"latitude":35,"longitude":139}}"""));
+        });
+        Assert.Equal(new GooglePlacesResult("abc", 35, 139), await CreateClient(handler).GetAsync("abc"));
+    }
+
+    [Fact]
     public async Task Sends_text_search_with_key_and_minimal_field_mask()
     {
         using var handler = new RecordingHandler((request, _) =>
@@ -16,7 +29,7 @@ public sealed class GooglePlacesClientTests
             Assert.Equal(HttpMethod.Post, request.Method);
             Assert.Equal("https://places.googleapis.com/v1/places:searchText", request.RequestUri!.AbsoluteUri);
             Assert.Equal("test-key", request.Headers.GetValues("X-Goog-Api-Key").Single());
-            Assert.Equal("places.id,places.location,nextPageToken", request.Headers.GetValues("X-Goog-FieldMask").Single());
+            Assert.Equal("places.id,places.displayName,places.formattedAddress,places.location,nextPageToken", request.Headers.GetValues("X-Goog-FieldMask").Single());
             Assert.DoesNotContain("test-key", request.RequestUri.Query);
             return Task.FromResult(JsonResponse("""
                 {"places":[{"id":"places/abc","location":{"latitude":35.7286762,"longitude":139.7303427}}]}
@@ -55,15 +68,17 @@ public sealed class GooglePlacesClientTests
             {"places":[{"id":"places/a","location":{"latitude":35,"longitude":139}},{"id":"places/b","location":{"latitude":36,"longitude":140}}]}
             """)));
         var multipleClient = CreateClient(multipleHandler);
-        var multiple = await Assert.ThrowsAsync<ArgumentException>(() => multipleClient.SearchAsync("station"));
+        var multiple = await Assert.ThrowsAsync<LocationAmbiguousException>(() => multipleClient.SearchAsync("station"));
         Assert.Contains("multiple possible places", multiple.Message);
+        Assert.Equal(2, multiple.Candidates.Count);
+        Assert.Equal("places/a", multiple.Candidates[0].PlaceId);
         Assert.Contains("specific Google Maps link", multiple.Message);
 
         using var pageHandler = new RecordingHandler((_, _) => Task.FromResult(JsonResponse("""
             {"places":[{"id":"places/a","location":{"latitude":35,"longitude":139}}],"nextPageToken":"more"}
             """)));
         var pageClient = CreateClient(pageHandler);
-        var page = await Assert.ThrowsAsync<ArgumentException>(() => pageClient.SearchAsync("station"));
+        var page = await Assert.ThrowsAsync<LocationAmbiguousException>(() => pageClient.SearchAsync("station"));
         Assert.Contains("multiple possible places", page.Message);
     }
 

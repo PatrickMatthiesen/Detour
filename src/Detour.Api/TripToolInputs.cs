@@ -20,6 +20,8 @@ public sealed class PlaceChanges
     public string? SourceUrl { get; set; }
     [Description("Place links and short links resolve coordinates automatically. Name-only maps/search URLs use Google Places Text Search when configured and must match one place. Map viewport centers are ignored. Otherwise provide verified latitude and longitude.")]
     public string? GoogleMapsUrl { get; set; }
+    [Description("Google Place ID selected from a business result or returned candidates. Supply instead of googleMapsUrl or coordinates.")]
+    public string? GooglePlaceId { get; set; }
     [Description("Required as a pair unless the Google Maps URL resolves place coordinates. Never guess.")]
     public double? Latitude { get; set; }
     [Description("Required as a pair unless the Google Maps URL resolves place coordinates. Never guess.")]
