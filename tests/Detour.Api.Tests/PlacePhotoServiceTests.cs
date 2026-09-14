@@ -133,7 +133,7 @@ public sealed class PlacePhotoServiceTests
     [InlineData("http://example.test:8080/image.jpg")]
     [InlineData("http://user:password@example.test/image.jpg")]
     public void Downloader_rejects_local_credentialed_and_nonstandard_urls(string value)
-        => Assert.Throws<InvalidOperationException>(() => PhotoDownloader.ValidateUri(value));
+        => Assert.Throws<PhotoImportException>(() => PhotoDownloader.ValidateUri(value));
 
     private static TripDbContext CreateDb() => new(new DbContextOptionsBuilder<TripDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
 

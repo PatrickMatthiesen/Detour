@@ -28,7 +28,7 @@ public sealed class PhotoDownloader(IHttpClientFactory clients)
         ConnectCallback = async (context, cancellationToken) =>
         {
             var addresses = await Dns.GetHostAddressesAsync(context.DnsEndPoint.Host, cancellationToken);
-            var address = addresses.FirstOrDefault(IsPublic) ?? throw new InvalidOperationException("The image source resolved to a private or local address.");
+            var address = addresses.FirstOrDefault(IsPublic) ?? throw new PhotoImportException("invalid_photo_url", "The image source resolved to a private or local address.");
             var socket = new Socket(address.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
             try
             {
@@ -49,16 +49,16 @@ public sealed class PhotoDownloader(IHttpClientFactory clients)
             using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
             if ((int)response.StatusCode is >= 300 and < 400 && response.Headers.Location is { } location)
             {
-                if (redirects >= 4) throw new InvalidOperationException("The image source redirected too many times.");
+                if (redirects >= 4) throw new PhotoImportException("too_many_redirects", "The image source redirected too many times.");
                 uri = ValidateUri(new Uri(uri, location).ToString());
                 continue;
             }
             response.EnsureSuccessStatusCode();
             var contentType = response.Content.Headers.ContentType?.MediaType?.ToLowerInvariant();
             if (contentType is null || !ImageTypes.Contains(contentType, StringComparer.Ordinal))
-                throw new InvalidOperationException("The image source did not return a supported image content type.");
+                throw new PhotoImportException("unsupported_content_type", "The image source did not return a supported image content type.");
             if (response.Content.Headers.ContentLength is > MaxDownloadBytes)
-                throw new InvalidOperationException("The image source is larger than 10 MB.");
+                throw new PhotoImportException("too_large", "The image source is larger than 10 MB.");
 
             await using var source = await response.Content.ReadAsStreamAsync(cancellationToken);
             return await NormalizeAsync(source, cancellationToken);
@@ -78,8 +78,8 @@ public sealed class PhotoDownloader(IHttpClientFactory clients)
         {
             await using var buffer = await ReadBoundedAsync(source, processingToken);
             var decoderOptions = new DecoderOptions { MaxFrames = 1 };
-            var info = await Image.IdentifyAsync(decoderOptions, buffer, processingToken) ?? throw new InvalidOperationException("The image source is not a valid image.");
-            if ((long)info.Width * info.Height > MaxDecodedPixels) throw new InvalidOperationException("The image dimensions are too large.");
+            var info = await Image.IdentifyAsync(decoderOptions, buffer, processingToken) ?? throw new PhotoImportException("invalid_image", "The image source is not a valid image.");
+            if ((long)info.Width * info.Height > MaxDecodedPixels) throw new PhotoImportException("too_large", "The image dimensions are too large.");
             buffer.Position = 0;
             using var image = await Image.LoadAsync(decoderOptions, buffer, processingToken);
             image.Mutate(x => x.AutoOrient());
@@ -110,11 +110,11 @@ public sealed class PhotoDownloader(IHttpClientFactory clients)
     public static Uri ValidateUri(string value)
     {
         if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https") || uri.UserInfo.Length > 0 || uri.Port is not (-1 or 80 or 443))
-            throw new InvalidOperationException("Image URLs must use HTTP or HTTPS on port 80 or 443 and must not contain credentials.");
+            throw new PhotoImportException("invalid_photo_url", "Image URLs must use HTTP or HTTPS on port 80 or 443 and must not contain credentials.");
         if (uri.HostNameType == UriHostNameType.Dns && string.IsNullOrWhiteSpace(uri.DnsSafeHost))
-            throw new InvalidOperationException("The image URL host is invalid.");
+            throw new PhotoImportException("invalid_photo_url", "The image URL host is invalid.");
         if (IPAddress.TryParse(uri.Host, out var address) && !IsPublic(address))
-            throw new InvalidOperationException("Private and local image URLs are not allowed.");
+            throw new PhotoImportException("invalid_photo_url", "Private and local image URLs are not allowed.");
         return uri;
     }
 
@@ -178,7 +178,7 @@ public sealed class PhotoDownloader(IHttpClientFactory clients)
                 var count = (int)Math.Min(rented.Length, remaining + 1);
                 var read = await source.ReadAsync(rented.AsMemory(0, count), cancellationToken);
                 if (read == 0) break;
-                if (read > remaining) throw new InvalidOperationException("The image source is larger than 10 MB.");
+                if (read > remaining) throw new PhotoImportException("too_large", "The image source is larger than 10 MB.");
                 await result.WriteAsync(rented.AsMemory(0, read), cancellationToken);
             }
             result.Position = 0;

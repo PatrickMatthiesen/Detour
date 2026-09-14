@@ -203,7 +203,7 @@ app.Use(async (context, next) =>
         if (!context.Response.HasStarted)
         {
             context.Response.StatusCode = StatusCodes.Status400BadRequest;
-            await context.Response.WriteAsJsonAsync(new { error = "photo_import_failed", message = "The image could not be imported. Check the image URL, format, size, and storage availability." });
+            await context.Response.WriteAsJsonAsync(new { error = "photo_import_failed", message = PhotoDiagnostics.From(ex).Message, details = PhotoDiagnostics.From(ex) });
         }
     }
 });
@@ -246,7 +246,7 @@ var putTrip = app.MapPut("/api/trip", async (TripSnapshot request, TripService s
         ReplaceResult.Success success => Results.Ok(success.Snapshot),
         ReplaceResult.Conflict conflict => Results.Conflict(conflict.Snapshot),
             ReplaceResult.Invalid invalid => Results.BadRequest(new { error = "invalid_trip", message = invalid.Message }),
-            ReplaceResult.PhotoFailed failed => Results.BadRequest(new { error = "photo_import_failed", message = failed.Message }),
+            ReplaceResult.PhotoFailed failed => Results.BadRequest(new { error = "photo_import_failed", message = failed.Message, details = failed.Details }),
         _ => Results.BadRequest(new { error = "invalid_trip" })
     };
 });

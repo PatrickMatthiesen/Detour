@@ -624,6 +624,60 @@ public sealed class PostgresIntegrationTests : IAsyncLifetime
         Assert.Equal(saved.Snapshot.Version + 1, (await CreateService(verify, "photo-race-owner").GetSnapshotAsync()).Version);
     }
 
+    [Theory]
+    [InlineData(BulkEditMode.atomic, 0)]
+    [InlineData(BulkEditMode.best_effort, 1)]
+    public async Task Bulk_photo_failure_publishes_only_committed_metadata(BulkEditMode mode, int expectedCount)
+    {
+        if (!HasDatabase()) return;
+        await using var db = CreateDb();
+        var service = new TripService(db, PhotoOwner("bulk-owner"),
+            new PhotoImportService(db, new PhotoDownloader(new StaticPhotoHttpClientFactory()), new HttpPhotoStore()));
+        var tools = new TripMcpTools(service, new TripItemEditor(service));
+        var initial = await service.GetSnapshotAsync();
+        var result = await tools.EditPlaces(initial.Version,
+            [BulkPhoto("good"), BulkPhoto("bad", "invalid-kind")], mode);
+        Assert.Equal(expectedCount != 0, result.Committed);
+        await using var verify = CreateDb();
+        var saved = await CreateService(verify, "bulk-owner").GetSnapshotAsync();
+        Assert.Equal(expectedCount, saved.Places.Count);
+        Assert.Equal(expectedCount, await verify.PlacePhotos.CountAsync());
+        Assert.Equal(initial.Version + (expectedCount > 0 ? 1 : 0), saved.Version);
+        Assert.Equal(expectedCount == 0 ? 1 : 0, await verify.PhotoObjectDeletions.CountAsync());
+    }
+
+    [Fact]
+    public async Task Concurrent_bulk_writes_commit_exactly_one_complete_batch()
+    {
+        if (!HasDatabase()) return;
+        await using var setup = CreateDb();
+        var initial = await CreateService(setup, "bulk-race").GetSnapshotAsync();
+        await using var db1 = CreateDb();
+        await using var db2 = CreateDb();
+        var store = new HttpPhotoStore();
+        TripMcpTools Tools(TripDbContext db)
+        {
+            var service = new TripService(db, PhotoOwner("bulk-race"),
+                new PhotoImportService(db, new PhotoDownloader(new StaticPhotoHttpClientFactory()), store));
+            return new(service, new TripItemEditor(service));
+        }
+        var results = await Task.WhenAll(
+            Tools(db1).EditPlaces(initial.Version, [BulkPhoto("left-a"), BulkPhoto("left-b")]),
+            Tools(db2).EditPlaces(initial.Version, [BulkPhoto("right-a"), BulkPhoto("right-b")], BulkEditMode.best_effort));
+        Assert.Single(results, x => x.Success);
+        Assert.Single(results, x => x.Error == "version_conflict");
+        await using var verify = CreateDb();
+        var saved = await CreateService(verify, "bulk-race").GetSnapshotAsync();
+        Assert.Equal(initial.Version + 1, saved.Version);
+        Assert.Equal(2, saved.Places.Count);
+        Assert.Equal(2, await verify.PlacePhotos.CountAsync());
+        Assert.True(saved.Places.All(x => x.Id.StartsWith("left-")) || saved.Places.All(x => x.Id.StartsWith("right-")));
+    }
+
+    private static PlaceEditOperation BulkPhoto(string id, string kind = "place") => new(EditOperation.create, id,
+        new PlaceChanges { Name = id, City = "Tokyo", Latitude = 35, Longitude = 139,
+            Photo = new PhotoInput { Url = "https://images.example.test/image.png", Kind = kind } });
+
     private static async Task CompleteGoogleLoginAsync(HttpClient client, string returnPath)
     {
         using var login = await client.GetAsync($"/auth/login?returnUrl={Uri.EscapeDataString(returnPath)}");

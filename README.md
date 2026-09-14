@@ -49,7 +49,7 @@ To configure the plugin in ChatGPT:
 4. Select default scopes `openid`, `email`, `offline_access`, `profile`, and `tripadvisor_api`.
 5. Copy the displayed **Callback URL** (currently `https://chatgpt.com/connector_platform_oauth_redirect`) into Detour's `Auth__OAuth__RedirectUris__0` configuration. The server's `Auth__OAuth__ClientId` must match `detour-chatgpt`.
 6. Accept the custom MCP server warning, click **Create**, and complete Google sign-in with an allowed owner account.
-7. In **Settings → Plugins → Detour**, confirm the connection is present. If Actions is empty, click **Refresh**; the catalog should include `get_trip`, `search_places`, and seven trip edit actions. Place photo import and removal are part of `edit_place`.
+7. In **Settings → Plugins → Detour**, confirm the connection is present. If Actions is empty, click **Refresh**; the catalog should include `get_trip`, `search_places`, `edit_places`, and seven single-record trip edit actions. Place photo import and removal are part of `edit_place`.
 8. Start a new chat, type `@Detour`, select this plugin, and ask it to read the trip overview. If it is missing from the picker, reload ChatGPT. If an older development plugin is also installed, select the new Detour connection.
 
 The resource is the complete `/mcp` URL; `tripadvisor_api` is the permission scope. See [authentication](docs/authentication.md) for deployment credentials, OAuth discovery, and troubleshooting.

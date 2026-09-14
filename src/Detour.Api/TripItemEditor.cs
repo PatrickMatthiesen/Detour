@@ -6,7 +6,7 @@ using System.Text.Json.Serialization;
 
 namespace Detour.Api;
 
-public sealed record ItemEditResult(bool Success, long Version, string? Error, string? Message, object? Item);
+public sealed record ItemEditResult(bool Success, long Version, string? Error, string? Message, object? Item, EditDiagnostic? Details = null);
 
 public sealed class TripItemEditor(TripService service)
 {
@@ -116,18 +116,18 @@ public sealed class TripItemEditor(TripService service)
         return result switch
         {
             ReplaceResult.Success success => new ItemEditResult(true, success.Snapshot.Version, null, null, FindItem(success.Snapshot, itemType, id) ?? collectionItem),
-            ReplaceResult.PhotoFailed failed => Failure(expectedVersion, "photo_import_failed", failed.Message),
+            ReplaceResult.PhotoFailed failed => new(false, expectedVersion, "photo_import_failed", failed.Message, null, failed.Details),
             ReplaceResult.Conflict conflict => Failure(
                 conflict.Snapshot.Version,
                 "version_conflict",
                 $"The trip changed while saving. Re-read version {conflict.Snapshot.Version} and reassess the edit.",
                 FindItem(conflict.Snapshot, itemType, id)),
-            ReplaceResult.Invalid invalid => Failure(snapshot.Version, "validation_failed", invalid.Message ?? "The edited item failed trip validation. Check its dates, durations, coordinates, and URLs."),
+            ReplaceResult.Invalid invalid => new(false, snapshot.Version, "validation_failed", invalid.Message ?? "The edited item failed trip validation.", null, invalid.Details),
             _ => throw new UnreachableException()
         };
     }
 
-    private static (T? Item, string? Error) TryApplyPatch<T>(T source, string id, JsonObject? changes) where T : class
+    internal static (T? Item, string? Error) TryApplyPatch<T>(T source, string id, JsonObject? changes) where T : class
     {
         try
         {
@@ -168,7 +168,7 @@ public sealed class TripItemEditor(TripService service)
         }
     }
 
-    private static string? ValidateEditedItem(TripSnapshot snapshot, object item, bool isCreate, JsonObject? changes)
+    internal static string? ValidateEditedItem(TripSnapshot snapshot, object item, bool isCreate, JsonObject? changes)
     {
         switch (item)
         {
@@ -220,7 +220,7 @@ public sealed class TripItemEditor(TripService service)
         return null;
     }
 
-    private static string? GetDeleteReferenceError(TripSnapshot snapshot, object item) => item switch
+    internal static string? GetDeleteReferenceError(TripSnapshot snapshot, object item) => item switch
     {
         Place place when snapshot.Activities.FirstOrDefault(activity => activity.PlaceId == place.Id) is { } activity
             => $"Place '{place.Id}' is referenced by activity '{activity.Id}'. Update or delete that activity first.",

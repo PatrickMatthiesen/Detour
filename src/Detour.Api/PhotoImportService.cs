@@ -8,9 +8,9 @@ public sealed class PhotoImportService(TripDbContext db, PhotoDownloader downloa
         var photo = place.Photo!;
         var kind = string.IsNullOrWhiteSpace(photo.Kind) ? "place" : photo.Kind.Trim().ToLowerInvariant();
         if (kind is not ("place" or "neighbourhood" or "illustrative"))
-            throw new InvalidOperationException("Photo kind must be place, neighbourhood, or illustrative.");
+            throw new PhotoImportException("invalid_photo", "Photo kind must be place, neighbourhood, or illustrative.");
         if (photo.SourceUrl?.Length > 2048 || photo.Author?.Length > 500 || photo.Caption?.Length > 500 || photo.License?.Length > 500)
-            throw new InvalidOperationException("Photo metadata is too long.");
+            throw new PhotoImportException("invalid_photo", "Photo metadata is too long.");
         if (!string.IsNullOrWhiteSpace(photo.SourceUrl)) PhotoDownloader.ValidateUri(photo.SourceUrl);
         using var downloaded = await downloader.DownloadAsync(photo.Url, ct);
         var now = DateTimeOffset.UtcNow;

@@ -64,8 +64,16 @@ public sealed class TripMcpToolsTests
         {
             var tool = McpServerTool.Create(method, (object)new TripMcpTools(null!, null!)).ProtocolTool;
             Assert.NotNull(tool.OutputSchema);
-            Assert.Equal(method.Name == "EditPlace", tool.Annotations!.OpenWorldHint);
+            Assert.Equal(method.Name is "EditPlace" or "EditPlaces", tool.Annotations!.OpenWorldHint);
             Assert.Equal(method.Name is "GetTrip" or "SearchPlaces", tool.Annotations.ReadOnlyHint);
+            if (method.Name == "EditPlaces")
+            {
+                var schema = tool.InputSchema.ToString();
+                Assert.Contains("best_effort", schema);
+                Assert.Contains("save_without_new_photo", schema);
+                Assert.Contains("googlePlaceId", schema);
+                Assert.Contains("operations", schema);
+            }
             if (method.Name == "EditTask")
             {
                 var schema = tool.InputSchema.ToString();

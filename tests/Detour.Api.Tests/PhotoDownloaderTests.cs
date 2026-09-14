@@ -67,7 +67,7 @@ public sealed class PhotoDownloaderTests
     {
         await using var input = new MemoryStream(PngWithDimensions(10_000, 5_000));
 
-        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        var error = await Assert.ThrowsAsync<PhotoImportException>(() =>
             PhotoDownloader.NormalizeAsync(input, CancellationToken.None));
 
         Assert.Contains("dimensions", error.Message, StringComparison.OrdinalIgnoreCase);
@@ -78,7 +78,7 @@ public sealed class PhotoDownloaderTests
     {
         await using var input = new MemoryStream(new byte[PhotoDownloader.MaxDownloadBytes + 1]);
 
-        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        var error = await Assert.ThrowsAsync<PhotoImportException>(() =>
             PhotoDownloader.NormalizeAsync(input, CancellationToken.None));
 
         Assert.Contains("larger than 10 MB", error.Message, StringComparison.Ordinal);

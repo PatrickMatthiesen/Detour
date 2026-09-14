@@ -35,6 +35,23 @@ public sealed partial class GoogleMapsCoordinates(HttpClient client, GooglePlace
         return null;
     }
 
+    public static string? PlaceId(string? url)
+    {
+        if (!Uri.TryCreate(NormalizeUrl(url), UriKind.Absolute, out var uri) || !IsMapsUri(uri)) return null;
+        if (uri.AbsolutePath.StartsWith("/maps/dir", StringComparison.OrdinalIgnoreCase)) return null;
+        var query = QueryHelpers.ParseQuery(uri.Query);
+        if (query.TryGetValue("query_place_id", out var id) && id.Count == 1 && !string.IsNullOrWhiteSpace(id)) return id.ToString();
+        if (query.TryGetValue("q", out var q) && q.Count == 1 && q.ToString().StartsWith("place_id:", StringComparison.OrdinalIgnoreCase)) return q.ToString()[9..];
+        return null;
+    }
+
+    private async Task<Point?> ResolveIdAsync(string id, CancellationToken ct)
+    {
+        if (places is null) return null;
+        var result = await places.GetAsync(id, ct);
+        return new(result.Latitude, result.Longitude, result.GooglePlaceId, "place_id:" + result.GooglePlaceId);
+    }
+
     public static bool IsValid(double? latitude, double? longitude) =>
         latitude is { } lat && longitude is { } lng && double.IsFinite(lat) && double.IsFinite(lng)
         && lat is >= -90 and <= 90 && lng is >= -180 and <= 180;
@@ -46,6 +63,7 @@ public sealed partial class GoogleMapsCoordinates(HttpClient client, GooglePlace
         // Directions contain several coordinates, none of which is an unambiguous place pin.
         if (path.StartsWith("/maps/dir", StringComparison.OrdinalIgnoreCase)) return null;
         var query = QueryHelpers.ParseQuery(uri.Query);
+        if (query.ContainsKey("query_place_id")) return null;
         var data = path + (query.TryGetValue("data", out var encodedData) ? encodedData.ToString() : "");
         var pins = PlacePin().Matches(data);
         if (pins.Count == 1) return Pair(pins[0].Groups[1].Value, pins[0].Groups[2].Value);
@@ -62,6 +80,7 @@ public sealed partial class GoogleMapsCoordinates(HttpClient client, GooglePlace
 
     public async Task<Point?> ResolveAsync(string? url, CancellationToken cancellationToken)
     {
+        if (PlaceId(url) is { } id) return await ResolveIdAsync(id, cancellationToken);
         if (Parse(url) is { } point) return point;
         if (SearchQuery(url) is { } query) return await SearchAsync(query, cancellationToken);
         if (!Uri.TryCreate(NormalizeUrl(url), UriKind.Absolute, out var uri) || !IsShortLink(uri)) return null;
@@ -73,12 +92,14 @@ public sealed partial class GoogleMapsCoordinates(HttpClient client, GooglePlace
             {
                 // The client disables automatic redirects; every destination is checked first.
                 if (!IsMapsUri(uri)) return null;
+                if (PlaceId(uri.AbsoluteUri) is { } redirectedId) return await ResolveIdAsync(redirectedId, timeout.Token);
                 if (Parse(uri.AbsoluteUri) is { } resolved) return resolved;
                 if (SearchQuery(uri.AbsoluteUri) is { } redirectedQuery) return await SearchAsync(redirectedQuery, timeout.Token);
                 using var response = await client.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
                 if ((int)response.StatusCode is not (301 or 302 or 303 or 307 or 308) || response.Headers.Location is not { } location) return null;
                 uri = location.IsAbsoluteUri ? location : new Uri(uri, location);
             }
+            if (PlaceId(uri.AbsoluteUri) is { } lastId) return await ResolveIdAsync(lastId, timeout.Token);
             if (Parse(uri.AbsoluteUri) is { } lastPoint) return lastPoint;
             return SearchQuery(uri.AbsoluteUri) is { } lastQuery ? await SearchAsync(lastQuery, timeout.Token) : null;
         }

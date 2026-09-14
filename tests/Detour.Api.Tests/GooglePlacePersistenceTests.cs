@@ -16,6 +16,55 @@ public sealed class GooglePlacePersistenceTests
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     [Fact]
+    public async Task Place_id_resolves_caches_and_refreshes_same_identity()
+    {
+        await using var db = CreateDb();
+        var handler = new GooglePlacesHandler("nakiryu", 35.7, 139.7);
+        var service = CreateService(db, "owner-a", handler);
+        var tools = new TripMcpTools(service, new TripItemEditor(service));
+        var result = await tools.EditPlace(EditOperation.create, "one", 1,
+            new PlaceChanges { Name = "Nakiryu", City = "Tokyo", GooglePlaceId = "nakiryu" });
+        Assert.True(result.Success, result.Message);
+        Assert.True(Assert.IsType<Place>(result.Item).CoordinatesFromGoogle);
+        Assert.Equal("nakiryu", Assert.Single(handler.DetailIds));
+        Assert.Empty(handler.Queries);
+        var cache = Assert.Single(db.GooglePlaceLocations);
+        Assert.Equal("place_id:nakiryu", cache.Query);
+        cache.ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(-1);
+        await db.SaveChangesAsync();
+        var reloaded = await service.GetSnapshotAsync();
+        Assert.Equal(35.7, Assert.Single(reloaded.Places).Latitude);
+        Assert.Equal(2, handler.DetailIds.Count);
+        Assert.False(ReadRawPlace(db).TryGetProperty("latitude", out _));
+    }
+
+    [Fact]
+    public async Task Bulk_ambiguity_returns_candidates_and_allows_retry_by_id()
+    {
+        await using var db = CreateDb();
+        var handler = new GooglePlacesHandler("first", 35.7, 139.7,
+            """{"places":[{"id":"first","displayName":{"text":"First shop"},"formattedAddress":"1 Tokyo","location":{"latitude":35.7,"longitude":139.7}},{"id":"second","displayName":{"text":"Second shop"},"formattedAddress":"2 Tokyo","location":{"latitude":35.8,"longitude":139.8}}]}""");
+        var service = CreateService(db, "owner-a", handler);
+        var tools = new TripMcpTools(service, new TripItemEditor(service));
+        var result = await tools.EditPlaces(1,
+            [new(EditOperation.create, "ambiguous", new PlaceChanges { Name = "Shop", City = "Tokyo", GoogleMapsUrl = SearchUrl }),
+             new(EditOperation.create, "valid", new PlaceChanges { Name = "Valid", City = "Tokyo", Latitude = 35, Longitude = 139 })],
+            BulkEditMode.best_effort);
+        Assert.True(result.Committed);
+        Assert.Equal(2, result.Version);
+        var failure = result.Results[0].Error!;
+        Assert.Equal("ambiguous_location", failure.Code);
+        Assert.Equal(new LocationCandidate("first", "First shop", "1 Tokyo", 35.7, 139.7), failure.Candidates![0]);
+        Assert.Single((await service.GetSnapshotAsync()).Places);
+        Assert.Empty(db.GooglePlaceLocations);
+        var retry = await tools.EditPlaces(result.Version,
+            [new(EditOperation.create, "ambiguous", new PlaceChanges { Name = "Shop", City = "Tokyo", GooglePlaceId = failure.Candidates[0].PlaceId })]);
+        Assert.True(retry.Success);
+        Assert.Equal(2, (await service.GetSnapshotAsync()).Places.Count);
+        Assert.Single(db.GooglePlaceLocations);
+    }
+
+    [Fact]
     public async Task Name_only_mcp_create_uses_the_decoded_query_caches_and_reloads_coordinates()
     {
         await using var db = CreateDb();
@@ -136,6 +185,8 @@ public sealed class GooglePlacePersistenceTests
 
         Assert.False(result.Success);
         Assert.Contains("multiple", result.Message ?? "", StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("ambiguous_location", result.Details!.Code);
+        Assert.Equal(2, result.Details.Candidates!.Count);
         Assert.Equal(1, (await service.GetSnapshotAsync()).Version);
         Assert.Empty((await service.GetSnapshotAsync()).Places);
         Assert.Empty(db.GooglePlaceLocations);
@@ -545,10 +596,20 @@ public sealed class GooglePlacePersistenceTests
     private sealed class GooglePlacesHandler(string googlePlaceId, double latitude, double longitude, string? responseJson = null) : HttpMessageHandler
     {
         public List<string> Queries { get; } = [];
+        public List<string> DetailIds { get; } = [];
         public bool Failure { get; set; }
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            if (request.Method == HttpMethod.Get)
+            {
+                DetailIds.Add(Uri.UnescapeDataString(request.RequestUri!.Segments.Last()));
+                if (Failure) throw new HttpRequestException("simulated Google Places outage");
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(JsonSerializer.Serialize(new { id = googlePlaceId, location = new { latitude, longitude } }), Encoding.UTF8, "application/json")
+                };
+            }
             var body = await request.Content!.ReadAsStringAsync(cancellationToken);
             using var document = JsonDocument.Parse(body);
             Queries.Add(document.RootElement.GetProperty("textQuery").GetString()!);

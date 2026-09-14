@@ -153,6 +153,6 @@ public abstract record ReplaceResult
 {
     public sealed record Success(TripSnapshot Snapshot) : ReplaceResult;
     public sealed record Conflict(TripSnapshot Snapshot) : ReplaceResult;
-    public sealed record Invalid(string? Message = null) : ReplaceResult;
-    public sealed record PhotoFailed(string Message) : ReplaceResult;
+    public sealed record Invalid(string? Message = null, EditDiagnostic? Details = null) : ReplaceResult;
+    public sealed record PhotoFailed(string Message, EditDiagnostic? Details = null) : ReplaceResult;
 }
