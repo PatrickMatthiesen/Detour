@@ -163,7 +163,7 @@ export function DesignMap({places,selected,city,onCity,onPlace,focusedPlaceId,bo
  },[ready,places,routeStops]);
  useEffect(()=>{if(!ready||!map.current)return;const center=city?cityMapCenter(city,callbacks.current.places):undefined;map.current.easeTo({center:center??[137.5,35.8],zoom:center?9.2:5.8,offset:[insets.current.leftInset/2,-insets.current.bottomInset/2],duration:400})},[city,ready]);
  // Drawer movement must not trigger camera movement. Read its current size only when choosing a place.
- useEffect(()=>{const m=map.current;if(!m||!ready||!focusedPlaceId||focused?.longitude==null||focused.latitude==null)return;m.easeTo({center:[focused.longitude,focused.latitude],zoom:Math.max(14,m.getZoom()),offset:[insets.current.leftInset/2,-insets.current.bottomInset/2],duration:400})},[focusedPlaceId,ready,focused?.longitude,focused?.latitude]);
+ useEffect(()=>{const m=map.current;if(!m||!ready||!focusedPlaceId||focused?.longitude==null||focused.latitude==null)return;m.easeTo({center:[focused.longitude,focused.latitude],zoom:Math.max(12,m.getZoom()),offset:[insets.current.leftInset/2,-insets.current.bottomInset/2],duration:400})},[focusedPlaceId,ready,focused?.longitude,focused?.latitude]);
  useEffect(()=>{const m=map.current;if(!m||!ready||!palette)return;
  const tones={journey:{land:'#f7f5ef',water:'#b8dce3',accent:'#cb5745'},stone:{land:'#eeeae3',water:'#c8d1cc',accent:'#80624c'},sage:{land:'#e9ede3',water:'#bdcfc7',accent:'#557052'},sand:{land:'#f2e7d5',water:'#cad6ca',accent:'#a05a37'},original:{land:'#fafafa',water:'#cdd0d2',accent:'#2463eb'}};
  const tone=tones[palette];
