@@ -2396,6 +2396,26 @@ function BookingModal({
             />
           </label>
           <label>
+            Booking number
+            <input
+              type="text"
+              autoComplete="off"
+              spellCheck={false}
+              value={draft.bookingNumber || ""}
+              onChange={(e) => set("bookingNumber", e.target.value || null)}
+            />
+          </label>
+          <label>
+            PIN / access code
+            <input
+              type="text"
+              autoComplete="off"
+              spellCheck={false}
+              value={draft.pin || ""}
+              onChange={(e) => set("pin", e.target.value || null)}
+            />
+          </label>
+          <label>
             Confirmation code
             <input
               value={draft.confirmationCode || ""}

@@ -75,6 +75,8 @@ function cleanBooking(booking: Booking): Booking {
     kind: booking.kind.trim(),
     title: booking.title.trim(),
     status: booking.status.trim(),
+    bookingNumber: optionalText(booking.bookingNumber),
+    pin: optionalText(booking.pin),
     confirmationCode: optionalText(booking.confirmationCode),
     url: optionalText(booking.url),
     start: optionalText(booking.start),
@@ -277,6 +279,16 @@ export default function BookingEditor({ initial, isNew, timeZone, onClose, onSav
 
           <div className="booking-editor-grid">
             <label>
+              Booking number
+              <input type="text" autoComplete="off" spellCheck={false} value={fieldValue(draft.bookingNumber)} onChange={(event) => update("bookingNumber", event.target.value || null)} />
+            </label>
+            <label>
+              PIN / access code
+              <input type="text" autoComplete="off" spellCheck={false} value={fieldValue(draft.pin)} onChange={(event) => update("pin", event.target.value || null)} />
+            </label>
+          </div>
+          <div className="booking-editor-grid">
+            <label>
               Confirmation code
               <input value={fieldValue(draft.confirmationCode)} onChange={(event) => update("confirmationCode", event.target.value || null)} />
             </label>
@@ -291,7 +303,7 @@ export default function BookingEditor({ initial, isNew, timeZone, onClose, onSav
           </label>
           <label>
             Notes
-            <textarea rows={4} value={fieldValue(draft.notes)} onChange={(event) => update("notes", event.target.value || null)} />
+            <textarea rows={4} placeholder="Check-in instructions, other references, or anything else to remember" value={fieldValue(draft.notes)} onChange={(event) => update("notes", event.target.value || null)} />
           </label>
         </div>
 

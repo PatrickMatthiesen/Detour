@@ -10,6 +10,43 @@ namespace Detour.Api.Tests;
 public sealed class TripMcpToolsTests
 {
     [Fact]
+    public async Task Booking_references_round_trip_and_can_be_updated_and_cleared()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db);
+        var tools = new TripMcpTools(service, new TripItemEditor(service));
+        var initial = await service.GetSnapshotAsync();
+        var created = await tools.EditBooking(EditOperation.create, "booking-test", initial.Version,
+            new BookingChanges
+            {
+                Title = "Hotel reservation", BookingNumber = "0012345678", Pin = "0042",
+                ConfirmationCode = "ABC-123", Notes = "Collect keys at reception"
+            });
+        Assert.True(created.Success);
+        db.ChangeTracker.Clear();
+        var saved = Assert.Single((await service.GetSnapshotAsync()).Bookings);
+        Assert.Equal("0012345678", saved.BookingNumber);
+        Assert.Equal("0042", saved.Pin);
+        Assert.Equal("ABC-123", saved.ConfirmationCode);
+
+        // The browser saves complete booking records through this service method.
+        saved.Pin = "0A-42";
+        var updated = Assert.IsType<ReplaceResult.Success>(await service.UpdateBookingAsync(saved, created.Version));
+        db.ChangeTracker.Clear();
+        Assert.Equal("0A-42", Assert.Single((await service.GetSnapshotAsync()).Bookings).Pin);
+
+        var cleared = await tools.EditBooking(EditOperation.update, saved.Id, updated.Snapshot.Version,
+            new BookingChanges { Title = "Updated reservation" }, ["bookingNumber", "pin"]);
+        Assert.True(cleared.Success);
+        db.ChangeTracker.Clear();
+        var reloaded = Assert.Single((await service.GetSnapshotAsync()).Bookings);
+        Assert.Null(reloaded.BookingNumber);
+        Assert.Null(reloaded.Pin);
+        Assert.Equal("ABC-123", reloaded.ConfirmationCode);
+        Assert.Equal("Collect keys at reception", reloaded.Notes);
+    }
+
+    [Fact]
     public async Task Partial_tool_updates_preserve_fields_and_explicit_clear_removes_nullable_value()
     {
         await using var db = CreateDb();
