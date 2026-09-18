@@ -12,7 +12,7 @@ The expected snapshot shape is:
   "stays": [{"id":"stay-1","city":"Tokyo","name":"...","checkIn":"2026-10-01","checkOut":"2026-10-03","status":"planned","bookingId":null}],
   "travelLegs": [{"id":"leg-1","from":"Tokyo","to":"Kyoto","date":"2026-10-08","durationMinutes":140,"mode":"train","estimated":true}],
   "activities": [{"id":"activity-1","placeId":"place-1","title":null,"date":"2026-10-03","startTime":null,"durationMinutes":90,"status":"planned"}],
-  "bookings": [{"id":"booking-1","kind":"hotel","title":"...","status":"confirmed","confirmationCode":"...","url":"...","date":"2026-10-01","start":"2026-10-01T08:00:00+09:00","end":"2026-10-02T11:00:00+09:00","checkIn":"2026-10-01","checkOut":"2026-10-02","location":"...","notes":"..."}],
+  "bookings": [{"id":"booking-1","kind":"hotel","title":"...","status":"confirmed","bookingNumber":"0012345678","pin":"0042","confirmationCode":"...","url":"...","date":"2026-10-01","start":"2026-10-01T08:00:00+09:00","end":"2026-10-02T11:00:00+09:00","checkIn":"2026-10-01","checkOut":"2026-10-02","location":"...","notes":"..."}],
   "tasks": [{"id":"task-1","title":"Check passport expiry","dueDate":"2026-09-15","completed":false,"scope":"trip","reminderAt":null}],
   "packingItems": [{"id":"pack-1","name":"Passport","category":"Documents","quantity":1,"packed":false,"bag":"Personal item","notes":""}]
 }
@@ -30,3 +30,5 @@ Backend implementation notes:
 - `tasks` and `packingItems` are first-class trip records. A task can have a `reminderAt`; reminders are currently stored for the UI to display. `packingItems` supports quantity and optional bag assignment.
 - Streamable HTTP MCP is exposed at `/mcp` using the official `ModelContextProtocol.AspNetCore` SDK. Tools are owner-scoped and use the same service/concurrency checks. Development falls back to `local-dev` only for loopback requests. Production uses the configured OpenIddict authorization-code + PKCE server and the same authenticated owner for bearer MCP calls.
 - Browser login is `GET /auth/login`, session inspection is `GET /auth/me`, CSRF token retrieval is `GET /auth/csrf`, and logout is `POST /auth/logout`. Cookie-authenticated mutations must send the CSRF token in `X-CSRF-TOKEN`.
+
+Booking `bookingNumber`, `pin` (PIN or access code), and `confirmationCode` are optional strings, preserving leading zeros and letters. Use `notes` for additional references or check-in instructions. Omitted fields are preserved in partial edits; set a field to null to clear it.

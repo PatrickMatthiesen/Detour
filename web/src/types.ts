@@ -68,6 +68,8 @@ export interface Booking {
   kind: string;
   title: string;
   status: string;
+  bookingNumber?: string | null;
+  pin?: string | null;
   confirmationCode?: string | null;
   url?: string | null;
   start?: string | null;

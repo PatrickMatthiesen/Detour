@@ -77,6 +77,8 @@ public sealed class BookingChanges
     public string? Kind { get; set; }
     public string? Title { get; set; }
     public string? Status { get; set; }
+    public string? BookingNumber { get; set; }
+    public string? Pin { get; set; }
     public string? ConfirmationCode { get; set; }
     public string? Provider { get; set; }
     public string? Url { get; set; }
