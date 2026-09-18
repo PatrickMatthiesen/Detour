@@ -12,7 +12,10 @@ import {
   TrainFront,
   Ticket,
 } from "lucide-react";
-import { displayPlaces, photoFor, PlacePhoto, shortDate } from "../mockups/design-kit";
+import { displayPlaces } from "../places/displayPlaces";
+import { shortDate } from "../format";
+import { photoFor } from "../photos/place-photo";
+import PlacePhoto from "../photos/PlacePhoto";
 import { daySummary, datesForTrip } from "./planning";
 import type { Activity, Booking, Place, TravelLeg, TripSnapshot } from "../types";
 import TripCalendar, { DayIndicators } from "./TripCalendar";

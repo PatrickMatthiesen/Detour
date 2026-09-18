@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import maplibregl from "maplibre-gl";
-import { cityAreaPerimeter, cityRouteFeatures } from "./design-kit";
+import { cityAreaPerimeter, cityRouteFeatures } from "./design-map";
 import type { Place } from "../types";
 
 it("restores all ten connections when combined stay cities are corrected", () => {

@@ -1,7 +1,8 @@
 import {useEffect,useRef,useState} from "react";
 import {X,Plus,Check,ExternalLink,Camera} from "lucide-react";
 import type {Place} from "../types";
-import {photoFor,PlacePhoto} from "../mockups/design-kit";
+import {photoFor} from "../photos/place-photo";
+import PlacePhoto from "../photos/PlacePhoto";
 import "./PlaceDetails.css";
 
 // Only lift explicitly labelled paragraphs; keep all other source prose intact.

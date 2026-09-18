@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, Plus, X } from "lucide-react";
 import type { Stay, TripSnapshot } from "../types";
-import { shortDate } from "../mockups/design-kit";
+import { shortDate } from "../format";
 import { editStayRoute, reorderStayRoute, reviewStayRoute, shiftDate } from "./stay-editing";
 import { centers, cityMapCenter } from "./city-location";
 import "./StayEditor.css";

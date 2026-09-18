@@ -1,33 +1,12 @@
 import {useEffect,useRef,useState} from 'react';
 import maplibregl from 'maplibre-gl';
 import type {FeatureCollection,LineString} from 'geojson';
-import {Compass} from 'lucide-react';
-import {getTrip} from '../api';
-import type {Place,TripSnapshot} from '../types';
+import type {Place} from '../types';
 import {centers, cityMapCenter, unresolvedRouteCities} from '../plan/city-location';
-export {cityMapCenter} from '../plan/city-location';
-import {STATUS_COLORS, type summarizeCityStops} from './route-status';
-import PlacePhoto from '../photos/PlacePhoto';
-import {photoFor} from '../photos/place-photo';
-import './design-kit.css';
+import {STATUS_COLORS, type summarizeCityStops} from '../places/route-status';
+import './design-map.css';
 import 'maplibre-gl/dist/maplibre-gl.css';
-export {PlacePhoto,photoFor};
-export const designNames=['Photo explorer','City chapters','Interest board','Route planner','Map explorer','Day composer'];
-const featured=['Gotokuji Temple','Ghibli Museum, Mitaka','Ginza Itoya','Melon Pan 802 Hachioji','Menya Musashi — Tokyo locations','Koenji — thrift and vintage neighbourhood','Pixel Lab Tokyo — Game Boy Mod Workshop','Nakano — anime, watches and nightlife'];
-const knownCoordinates:Record<string,{latitude:number;longitude:number}>={
- 'Gotokuji Temple':{latitude:35.64877778,longitude:139.64741667},
- 'Ghibli Museum, Mitaka':{latitude:35.69623333,longitude:139.57043056},
-};
-export function displayPlaces(input:Place[]){const rank=(p:Place)=>{const i=featured.indexOf(p.name);return i<0?100:i}; return [...input].sort((a,b)=>rank(a)-rank(b)).map(p=>{const coordinates=knownCoordinates[p.name];return p.latitude==null&&p.longitude==null&&coordinates?{...p,...coordinates}:p})}
-export function useDesignTrip(){
- const [trip,setTrip]=useState<TripSnapshot|null>(null),[error,setError]=useState(''),[selected,setSelected]=useState<Set<string>>(new Set());
- useEffect(()=>{let alive=true;getTrip().then(t=>{if(!alive)return; const places=displayPlaces(t.places);setTrip({...t,places});setSelected(new Set(t.places.filter(p=>p.selected).map(p=>p.id)))}).catch(e=>alive&&setError(String(e)));return()=>{alive=false}},[]);
- const toggle=(id:string)=>setSelected(prev=>{const next=new Set(prev);next.has(id)?next.delete(id):next.add(id);return next});
- return {trip,selected,toggle,loading:!trip&&!error,error};
-}
-export function cityPlaces(trip:TripSnapshot|null,city:string){return trip?.places.filter(p=>!city||city==='All'||city==='All cities'||p.city===city)??[]}
-export function shortDate(date:string){return new Intl.DateTimeFormat('en-GB',{day:'numeric',month:'short',timeZone:'UTC'}).format(new Date(date.slice(0,10)+'T12:00:00Z'))}
-export function PreviewNav({active}:{active:number}){return <header className="dk-nav"><a href="/" className="dk-trip"><Compass size={19}/><strong>Japan 2026</strong><span>30 Sep – 25 Oct</span></a><nav aria-label="Design alternatives">{designNames.map((n,i)=><a key={n} href={'/'+(i+4)} className={active===i+4?'dk-active':''} title={n}>{i+4}<span>{n}</span></a>)}</nav><span className="dk-preview" title="Your saved trip is unchanged. Reload to reset this preview.">Preview only</span></header>}
+
 const defaultAreaRadius=(city:string):[number,number]=>city==='Tokyo'?[.23,.13]:[.10,.08];
 /** Return an ellipse perimeter that contains every resolved place in a city. */
 export function cityAreaPerimeter(city:string,points:Array<[number,number]>,center=centers[city]):Array<[number,number]> {
@@ -164,7 +143,7 @@ export function DesignMap({places,selected,city,onCity,onPlace,focusedPlaceId,bo
  useEffect(()=>{if(!ready||!map.current)return;const center=city?cityMapCenter(city,callbacks.current.places):undefined;map.current.easeTo({center:center??[137.5,35.8],zoom:center?9.2:5.8,offset:[insets.current.leftInset/2,-insets.current.bottomInset/2],duration:400})},[city,ready]);
  // Drawer movement must not trigger camera movement. Read its current size only when choosing a place.
  useEffect(()=>{const m=map.current;if(!m||!ready||!focusedPlaceId||focused?.longitude==null||focused.latitude==null)return;m.easeTo({center:[focused.longitude,focused.latitude],zoom:Math.max(12,m.getZoom()),offset:[insets.current.leftInset/2,-insets.current.bottomInset/2],duration:400})},[focusedPlaceId,ready,focused?.longitude,focused?.latitude]);
- useEffect(()=>{const m=map.current;if(!m||!ready||!palette)return;
+ useEffect(()=>{if(!ready||!map.current)return;const m=map.current;if(!palette)return;
  const tones={journey:{land:'#f7f5ef',water:'#b8dce3',accent:'#cb5745'},stone:{land:'#eeeae3',water:'#c8d1cc',accent:'#80624c'},sage:{land:'#e9ede3',water:'#bdcfc7',accent:'#557052'},sand:{land:'#f2e7d5',water:'#cad6ca',accent:'#a05a37'},original:{land:'#fafafa',water:'#cdd0d2',accent:'#2463eb'}};
  const tone=tones[palette];
  const paint=(id:string,key:string,value:unknown)=>{const cacheKey=id+'/'+key;if(!originalPaint.current.has(cacheKey))originalPaint.current.set(cacheKey,m.getPaintProperty(id,key)??null);m.setPaintProperty(id,key,palette==='original'?originalPaint.current.get(cacheKey):value)};

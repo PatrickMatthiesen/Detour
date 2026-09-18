@@ -2,7 +2,7 @@ import {useEffect,useMemo,useRef,useState} from "react";
 import {Hotel,Ticket,Plus,X} from "lucide-react";
 import type {Booking,TripSnapshot} from "../types";
 import {daySummary,datesForTrip} from "./planning";
-import {shortDate} from "../mockups/design-kit";
+import {shortDate} from "../format";
 import "./BookingsPanel.css";
 type Props={snapshot:TripSnapshot;onClose:()=>void;onEdit:(booking:Booking)=>void;onAdd:(date?:string,city?:string)=>void};
 export default function BookingsPanel({snapshot,onClose,onEdit,onAdd}:Props){

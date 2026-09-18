@@ -11,21 +11,18 @@ import {
   TrainFront,
   Search,
 } from "lucide-react";
-import {
-  DesignMap,
-  PlacePhoto,
-  PreviewNav,
-  cityPlaces,
-  shortDate,
-  useDesignTrip,
-} from "./design-kit";
+import { DesignMap } from "../map/design-map";
+import PlacePhoto from "../photos/PlacePhoto";
+import { shortDate } from "../format";
 import type { Place, TripSnapshot } from "../types";
 import PlaceDetails from "../plan/PlaceDetails";
 import { usePlacesDrawer } from "./use-places-drawer";
 import { useRecentCities } from "./recent-cities";
 import { buildRouteStops, summarizeCityStops, STATUS_COLORS } from "./route-status";
-import "./four.css";
+import "./places-explorer.css";
 import "./places-drawer.css";
+
+function cityPlaces(trip:TripSnapshot|null,city:string){return trip?.places.filter(p=>!city||city==='All'||city==='All cities'||p.city===city)??[]}
 
 function placeDescription(place: Place) {
   return (
@@ -57,11 +54,6 @@ function TransportBookings({trip}:{trip:TripSnapshot|null}) {
       <p>Recorded bookings only. Accommodation status does not include transport.</p>
     </div>
   </details>;
-}
-
-export default function ConceptFour() {
-  const state = useDesignTrip();
-  return <PlacesExplorer {...state} />;
 }
 
 export function PlacesExplorer({trip, selected, toggle, loading, error, header, onAdd, onEdit, renderEdit}: {trip:TripSnapshot|null;selected:Set<string>;toggle:(id:string)=>void;loading:boolean;error:string;header?:ReactNode;onAdd?:()=>void;onEdit?:(place:Place)=>void;renderEdit?:(place:Place,onClose:()=>void)=>ReactNode}) {
@@ -162,7 +154,7 @@ export function PlacesExplorer({trip, selected, toggle, loading, error, header, 
 
   return (
     <><div className="new-preview d4-page" data-palette="journey" style={statusVariables}>
-      {header ?? <PreviewNav active={4} />}
+      {header ?? null}
 
       <div className={`d4-workspace d4-drawer-workspace${drawer.collapsed ? " is-collapsed" : ""}`} ref={drawer.workspaceRef}>
         <aside className="d4-browse-panel d4-drawer" ref={panel} style={drawer.style} data-snap={drawer.snap} aria-label="Places panel">

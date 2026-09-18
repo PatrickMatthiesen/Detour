@@ -1,7 +1,7 @@
 import {useEffect,useRef} from "react";
 import {X,Plus,TrainFront} from "lucide-react";
 import type {TravelLeg} from "../types";
-import {shortDate} from "../mockups/design-kit";
+import {shortDate} from "../format";
 import "./BookingsPanel.css";
 export default function JourneysPanel({legs,onEdit,onAdd,onClose}:{legs:TravelLeg[];onEdit:(leg:TravelLeg)=>void;onAdd:()=>void;onClose:()=>void}){
  const dialog=useRef<HTMLDialogElement>(null);useEffect(()=>{dialog.current?.showModal()},[]);

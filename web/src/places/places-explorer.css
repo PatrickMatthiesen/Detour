@@ -1,3 +1,8 @@
+@import url('https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&family=DM+Sans:wght@400;500;600;700&display=swap');
+.new-preview {font-family:'Lato',sans-serif;color:#233044;background:#fff;font-size:15px;line-height:1.45;min-height:100vh;--design-accent:#2463eb;}
+.new-preview *{box-sizing:border-box}.new-preview h1,.new-preview h2,.new-preview h3{font-family:inherit;letter-spacing:normal;line-height:1.25}.new-preview h1{font-size:24px}.new-preview h2{font-size:20px}.new-preview h3{font-size:16px}.new-preview p{font-size:14px;line-height:1.5}.new-preview button,.new-preview input,.new-preview select{font:inherit}.new-preview button{cursor:pointer}.new-preview nav{flex-direction:row}.new-preview button:focus-visible,.new-preview a:focus-visible{outline:3px solid #477ce9;outline-offset:3px}.new-preview ::selection{background:#d5e5ff}.new-preview a{color:inherit}
+@media(max-width:700px){.new-preview{font-size:14px}}
+
 .new-preview.d4-page {
   --d4-blue: #2463eb;
   --d4-blue-soft: #eef4ff;
@@ -873,4 +878,4 @@
 
 .d4-stays-list {gap:8px 17px;}
 .d4-stay {position:relative;overflow:visible;}
-.d4-stay:not(:last-child)::after {content:"→";position:absolute;right:-15px;top:50%;transform:translateY(-50%);color:#758981;font-size:14px;}
+.d4-stay:not(:last-child)::after {content:"ÔåÆ";position:absolute;right:-15px;top:50%;transform:translateY(-50%);color:#758981;font-size:14px;}
