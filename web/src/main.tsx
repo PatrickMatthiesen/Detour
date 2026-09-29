@@ -1,6 +1,6 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   createRootRoute,
   createRoute,
@@ -10,14 +10,8 @@ import {
   RouterProvider,
   useLocation,
 } from "@tanstack/react-router";
-import {
-  getAuthSession,
-  getTrip,
-  loadSession,
-  logout,
-  previewTrip,
-  saveTrip,
-} from "./api";
+import { logout } from "./api";
+import { Check, Download, WifiOff } from "lucide-react";
 import { LoginScreen } from "./LoginScreen";
 import { DetourIcon } from "./DetourIcon";
 import PreparePage from "./prepare/PreparePage";
@@ -27,85 +21,60 @@ import { displayPlaces } from "./places/displayPlaces";
 import { shortDate } from "./format";
 import PlanPage from "./plan/PlanPage";
 import "./detour.css";
-import { TripMutationQueue } from "./trip-store";
-import type { TripSnapshot } from "./types";
+import { useTripState } from "./use-trip-state";
+import { TripEditingContext } from "./trip-editing";
 import { AddPlaceModal, EditPlaceModal } from "./places/PlaceModals";
 import "./styles.css";
-
-function useTripState() {
-  const [snapshot, setSnapshot] = useState<TripSnapshot>(() => previewTrip());
-  const [saveError, setSaveError] = useState("");
-  const storeRef = useRef<TripMutationQueue | null>(null);
-  if (!storeRef.current) {
-    storeRef.current = new TripMutationQueue(
-      snapshot,
-      async next => {
-        const saved = await saveTrip(next);
-        queryClient.setQueryData(["trip"], saved);
-        return saved;
-      },
-      (next, error) => {
-        setSnapshot(next);
-        setSaveError(error);
-      },
-    );
-  }
-  const query = useQuery({
-    queryKey: ["trip"],
-    queryFn: async () => {
-      await loadSession();
-      return getTrip();
-    },
-    retry: false,
-    staleTime: Infinity,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-  });
-  const apiState: "loading" | "live" | "offline" = query.isPending
-    ? "loading"
-    : query.isError
-      ? "offline"
-      : "live";
-  const apiError = query.isError ? (query.error as Error).message : saveError;
-  useEffect(() => {
-    if (query.data) {
-      storeRef.current?.replaceConfirmed(query.data);
-    }
-  }, [query.data]);
-  const mutate = useCallback(
-    (updater: (current: TripSnapshot) => TripSnapshot) => {
-      if (apiState !== "live") return;
-      storeRef.current?.enqueue(updater);
-    },
-    [apiState],
-  );
-  const retry = async () => {
-    setSaveError("");
-    const result = await query.refetch();
-    if (result.data) storeRef.current?.reset(result.data);
-  };
-  return { snapshot, mutate, apiState, apiError, retry };
-}
+import { loadTripSession, sessionOwner, type TripSession } from "./offline-session";
+import { clearOfflineTrip } from "./offline-storage";
+import { registerServiceWorker } from "./register-service-worker";
+import { useDownloadAnimation } from "./use-download-animation";
 
 function DetourApp() {
-  const [session, setSession] = useState<Awaited<ReturnType<typeof getAuthSession>> | null>(null);
+  const [loaded, setLoaded] = useState<TripSession | null>(null);
   const [failed, setFailed] = useState(false);
   const checkSession = useCallback(() => {
     setFailed(false);
-    getAuthSession().then(setSession).catch(() => setFailed(true));
+    loadTripSession().then(setLoaded).catch(() => setFailed(true));
   }, []);
   useEffect(checkSession, [checkSession]);
+  useEffect(() => {
+    window.addEventListener("online", checkSession);
+    return () => window.removeEventListener("online", checkSession);
+  }, [checkSession]);
   if (failed) return <LoginScreen mode="error" onRetry={checkSession}/>;
-  if (!session) return <LoginScreen mode="loading"/>;
+  if (!loaded) return <LoginScreen mode="loading"/>;
+  const { session } = loaded;
   if (!session.authenticated && !session.localDevelopment) return <LoginScreen mode="login" googleConfigured={session.googleConfigured}/>;
-  return <AuthenticatedDetourApp session={session}/>;
+  return <AuthenticatedDetourApp key={`${sessionOwner(session)}-${loaded.offline}`} loaded={loaded} reconnect={checkSession}/>;
 }
-function AuthenticatedDetourApp({session}: {session: Awaited<ReturnType<typeof getAuthSession>>}) {
+function AuthenticatedDetourApp({loaded, reconnect}: {loaded: TripSession; reconnect: () => void}) {
+  const { session } = loaded;
   const [sessionError, setSessionError] = useState("");
-  const state = useTripState();
+  const [shellStatus, setShellStatus] = useState<"preparing" | "ready" | "error">("preparing");
+  const prepareOffline = useCallback(() => {
+    setShellStatus("preparing");
+    void registerServiceWorker(setShellStatus)
+      .then(registration => { if (!registration) setShellStatus("error"); });
+  }, []);
+  useEffect(() => {
+    prepareOffline();
+    void navigator.storage?.persist?.().catch(() => {});
+  }, [prepareOffline]);
+  const state = useTripState(loaded);
   const { pathname } = useLocation();
   const [adding, setAdding] = useState(false);
   const { snapshot } = state;
+  const offlineReady = shellStatus === "ready" && state.offlineCurrent && !state.storageError && !state.recovering;
+  const offlineDownloading = state.apiState !== "offline" && !state.storageError &&
+    (shellStatus === "preparing" || state.recovering || !state.offlineCurrent);
+  const { animating: downloadAnimating, start: startDownloadAnimation } = useDownloadAnimation(offlineDownloading);
+  const offlineLabel = state.storageError ? "Offline download failed. Click to retry."
+    : state.apiState === "offline" ? "Offline. Browsing saved trip. Click to reconnect."
+    : offlineReady ? "Up to date for offline use."
+    : shellStatus === "error" ? "Trip saved; offline reopening unavailable here. Click to retry."
+    : "Saving for offline use…";
+  const OfflineIcon = state.apiState === "offline" ? WifiOff : !downloadAnimating && offlineReady ? Check : Download;
   const header = <header className="detour-nav">
     <Link to="/" className="detour-brand"><DetourIcon/>Detour</Link>
     <span className="detour-trip">{snapshot.trip.name}<small>{shortDate(snapshot.trip.startDate)} – {shortDate(snapshot.trip.endDate)}</small></span>
@@ -114,25 +83,33 @@ function AuthenticatedDetourApp({session}: {session: Awaited<ReturnType<typeof g
       <Link to="/plan" aria-current={pathname === "/plan" ? "page" : undefined}>Plan</Link>
       <Link to="/preparation" aria-current={pathname === "/preparation" ? "page" : undefined}>Prepare</Link>
     </nav>
-    {session?.authenticated && !session.localDevelopment && <button className="detour-account" onClick={()=>logout().then(()=>window.location.reload()).catch(error=>setSessionError(String(error)))}>Sign out</button>}
+    <button type="button" className={`detour-offline-button${offlineReady && !downloadAnimating && state.apiState !== "offline" ? " is-ready" : ""}${state.offlineCurrent && !state.storageError && !downloadAnimating && state.apiState !== "offline" ? " is-settled" : ""}${downloadAnimating ? " is-downloading" : ""}`}
+      aria-label={offlineLabel} aria-busy={offlineDownloading} title={offlineLabel} onClick={() => {
+        startDownloadAnimation();
+        prepareOffline();
+        if (loaded.offline) reconnect();
+        else void state.retry();
+      }}><OfflineIcon size={18} aria-hidden="true"/></button>
+    {session?.authenticated && !session.localDevelopment && <button className="detour-account" onClick={()=>logout().then(()=>clearOfflineTrip()).then(()=>window.location.reload()).catch(error=>setSessionError(String(error)))}>Sign out</button>}
   </header>;
-  if (state.apiError.includes("401")) return <LoginScreen mode="login" expired/>;
+  if (state.apiError.includes("401") || state.apiError.includes("403")) return <LoginScreen mode="login" expired/>;
   const selected = new Set(snapshot.places.filter(p => p.selected).map(p => p.id));
-  return <div className="detour-app">
+  return <TripEditingContext.Provider value={{ canEdit: state.canEdit, reason: state.reason, recovering: state.recovering, reload: state.retry }}><div className="detour-app">
     {sessionError && <div role="alert">{sessionError}</div>}
-    {state.apiError && <div className="detour-save-error" role="alert">{state.apiError} <button onClick={state.retry}>Reload saved trip</button>{state.apiError.includes("401") && <a href="/auth/login?returnUrl=%2F">Sign in</a>}</div>}
-    {state.apiState === "loading" || (state.apiState === "live" && snapshot.version === 0) ? <>{header}<p role="status">Loading your trip…</p></> : state.apiState === "offline" ? <>{header}<p>Your trip could not be loaded. Retry above to continue.</p></> : pathname === "/plan" ? <div className="detour-plan-shell">{header}<PlanPage snapshot={snapshot} update={state.mutate}/></div> : pathname === "/preparation" ? <>{header}<PreparePage snapshot={snapshot} update={state.mutate}/></> : <PlacesExplorer
+    {state.apiError && <div className="detour-save-error" role="alert"><strong>Editing paused.</strong> {state.apiError} Reload to check which changes were saved. <button disabled={state.recovering} onClick={state.retry}>{state.recovering ? "Reloading…" : "Reload saved trip"}</button>{state.apiError.includes("401") && <a href="/auth/login?returnUrl=%2F">Sign in</a>}</div>}
+    {state.apiState === "loading" || (state.apiState === "live" && !state.hasSnapshot) ? <>{header}<p role="status">Loading your trip…</p></> : state.apiState === "offline" && !state.hasSnapshot ? <>{header}<p>Your trip could not be loaded. Retry above to continue.</p></> : pathname === "/plan" ? <div className="detour-plan-shell">{header}<PlanPage snapshot={snapshot} update={state.mutate}/></div> : pathname === "/preparation" ? <>{header}<PreparePage snapshot={snapshot} update={state.mutate}/></> : <PlacesExplorer
       trip={{...snapshot,places:displayPlaces(snapshot.places)}} selected={selected}
       toggle={id => state.mutate(current => ({...current,places:current.places.map(p=>p.id===id?{...p,selected:!p.selected}:p)}))}
       loading={false} error="" header={header} onAdd={()=>setAdding(true)}
       renderEdit={(place, close) => <EditPlaceModal key={place.id} embedded
         place={snapshot.places.find(p => p.id === place.id) ?? place}
         onClose={close} onSave={updated => {
-          state.mutate(current => ({...current, places:current.places.map(p => p.id === updated.id ? updated : p)}));
+          if (!state.mutate(current => ({...current, places:current.places.map(p => p.id === updated.id ? updated : p)}))) return false;
           close();
+          return true;
         }}/>}/>}
-    {adding && <AddPlaceModal onClose={()=>setAdding(false)} onAdd={place=>{state.mutate(current=>({...current,places:[...current.places,place]}));setAdding(false)}}/>}
-  </div>;
+    {adding && <AddPlaceModal onClose={()=>setAdding(false)} onAdd={place=>{if (!state.mutate(current=>({...current,places:[...current.places,place]}))) return false;setAdding(false);return true;}}/>}
+  </div></TripEditingContext.Provider>;
 }
 function RouteShell() {
   return <DetourApp />;

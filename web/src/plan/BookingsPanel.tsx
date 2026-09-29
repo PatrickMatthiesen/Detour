@@ -1,3 +1,4 @@
+import { MutationButton } from "../trip-editing";
 import {useEffect,useMemo,useRef,useState} from "react";
 import {Hotel,Ticket,Plus,X} from "lucide-react";
 import type {Booking,TripSnapshot} from "../types";
@@ -25,9 +26,9 @@ export default function BookingsPanel({snapshot,onClose,onEdit,onAdd}:Props){
  return <dialog ref={dialog} className="booking-overview" aria-labelledby="booking-overview-title" onCancel={onClose}>
   <header><h2 id="booking-overview-title">Bookings</h2><button aria-label="Close bookings" onClick={onClose}><X size={19}/></button></header>
   <div className="booking-overview-body">
-   <div className="booking-overview-tools"><div aria-label="Booking filters">{[["all","All"],["hotel","Accommodation"],["confirmed","Confirmed"]].map(([id,label])=><button key={id} aria-pressed={filter===id} onClick={()=>setFilter(id)}>{label}</button>)}</div><button onClick={()=>onAdd()}><Plus size={15}/> Add booking</button></div>
+   <div className="booking-overview-tools"><div aria-label="Booking filters">{[["all","All"],["hotel","Accommodation"],["confirmed","Confirmed"]].map(([id,label])=><button key={id} aria-pressed={filter===id} onClick={()=>setFilter(id)}>{label}</button>)}</div><MutationButton onClick={()=>onAdd()}><Plus size={15}/> Add booking</MutationButton></div>
    <p className="booking-zone">Times in {snapshot.trip.timeZone || "Asia/Tokyo"}</p><div className="booking-overview-list">{bookings.map(b=><button key={b.id} className="booking-overview-row" onClick={()=>onEdit(b)}><span aria-hidden="true">{b.kind==="hotel"?<Hotel size={18}/>:<Ticket size={18}/>}</span><span><strong>{b.title}</strong><small>{when(b)}{b.location ? ` · ${b.location}`:""}</small></span><span className={`booking-status booking-status-${b.status}`}>{b.status}</span></button>)}{!bookings.length&&<p>No bookings in this view.</p>}</div>
-   <details className="booking-gaps"><summary>{gaps.length ? `${gaps.length} nights need confirmed accommodation` : "Accommodation covers every trip night"}</summary>{!!gaps.length&&<div>{gaps.map(g=><div key={g.date}><span><strong>{shortDate(g.date)}</strong> {g.city}</span><button onClick={()=>onAdd(g.date,g.city==="City unassigned"?"":g.city)}>Add accommodation</button></div>)}</div>}</details>
+   <details className="booking-gaps"><summary>{gaps.length ? `${gaps.length} nights need confirmed accommodation` : "Accommodation covers every trip night"}</summary>{!!gaps.length&&<div>{gaps.map(g=><div key={g.date}><span><strong>{shortDate(g.date)}</strong> {g.city}</span><MutationButton onClick={()=>onAdd(g.date,g.city==="City unassigned"?"":g.city)}>Add accommodation</MutationButton></div>)}</div>}</details>
   </div>
  </dialog>;
 }

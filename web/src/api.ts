@@ -1,6 +1,10 @@
 import type { TripSnapshot } from "./types";
 let csrfToken = "";
 
+export class HttpError extends Error {
+  constructor(public status: number, message: string) { super(message); }
+}
+
 export interface AuthSession {
   authenticated: boolean;
   userId?: string | null;
@@ -10,9 +14,9 @@ export interface AuthSession {
 }
 
 export async function getAuthSession(): Promise<AuthSession> {
-  const response = await fetch("/auth/me", { credentials: "same-origin" });
+  const response = await fetch("/auth/me", { credentials: "same-origin", cache: "no-store", signal: AbortSignal.timeout(8000) });
   if (!response.ok)
-    throw new Error(`Auth endpoint returned ${response.status}`);
+    throw new HttpError(response.status, `Auth endpoint returned ${response.status}`);
   return response.json() as Promise<AuthSession>;
 }
 
@@ -20,6 +24,7 @@ export async function loadSession(): Promise<void> {
   try {
     const response = await fetch("/auth/csrf", {
       credentials: "same-origin",
+      signal: AbortSignal.timeout(8000),
     });
     if (!response.ok) return;
     const session = (await response.json()) as { token?: string };
@@ -30,8 +35,8 @@ export async function loadSession(): Promise<void> {
 }
 
 export async function getTrip(): Promise<TripSnapshot> {
-  const response = await fetch("/api/trip");
-  if (!response.ok) throw new Error(`Trip API returned ${response.status}`);
+  const response = await fetch("/api/trip", { cache: "no-store", signal: AbortSignal.timeout(8000) });
+  if (!response.ok) throw new HttpError(response.status, `Trip API returned ${response.status}`);
   return response.json() as Promise<TripSnapshot>;
 }
 

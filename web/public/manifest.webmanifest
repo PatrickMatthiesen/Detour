@@ -1,0 +1,15 @@
+{
+  "id": "/",
+  "name": "Detour · Japan 2026",
+  "short_name": "Detour",
+  "description": "Your Japan 2026 trip plan, available offline after you save it.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f5f1e8",
+  "theme_color": "#f5f1e8",
+  "icons": [
+    { "src": "/icons/detour-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/detour-180.png", "sizes": "180x180", "type": "image/png", "purpose": "any" }
+  ]
+}

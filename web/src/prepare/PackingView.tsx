@@ -1,3 +1,5 @@
+import { MutationButton, EditingNotice, useTripEditing } from "../trip-editing";
+import type { TripMutate } from "../trip-store";
 import { Check, PackageCheck, Pencil, Plus, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { PackingItem, TripSnapshot } from "../types";
@@ -5,7 +7,7 @@ import "./PackingView.css";
 
 type Props = {
   snapshot: TripSnapshot;
-  update: (fn: (s: TripSnapshot) => TripSnapshot) => void;
+  update: TripMutate;
 };
 
 type PackingFilter = "all" | "unpacked";
@@ -25,6 +27,7 @@ function cleanOptional(value: string): string | null {
 }
 
 function PackingEditor({ initial, isNew, categories, bags, onClose, onSave }: PackingEditorProps) {
+  const { canEdit } = useTripEditing();
   const [draft, setDraft] = useState<PackingItem>(() => ({ ...initial }));
   const [quantityText, setQuantityText] = useState(() => String(initial.quantity));
   const [error, setError] = useState("");
@@ -61,6 +64,7 @@ function PackingEditor({ initial, isNew, categories, bags, onClose, onSave }: Pa
       return;
     }
 
+    if (!canEdit) return;
     onSave({
       ...draft,
       name,
@@ -92,6 +96,7 @@ function PackingEditor({ initial, isNew, categories, bags, onClose, onSave }: Pa
           </button>
         </header>
 
+        <EditingNotice/>
         {error && <p className="packing-editor-error" role="alert">{error}</p>}
 
         <div className="packing-editor-fields">
@@ -148,7 +153,7 @@ function PackingEditor({ initial, isNew, categories, bags, onClose, onSave }: Pa
 
         <footer className="packing-editor-footer">
           <button type="button" onClick={onClose}>Cancel</button>
-          <button type="submit" className="packing-primary">{isNew ? "Add item" : "Save item"}</button>
+          <MutationButton type="submit" className="packing-primary">{isNew ? "Add item" : "Save item"}</MutationButton>
         </footer>
       </form>
     </dialog>
@@ -207,21 +212,21 @@ export default function PackingView({ snapshot, update }: Props) {
   };
 
   const saveItem = (item: PackingItem, isNew: boolean) => {
-    update((current) => ({
+    const accepted = update((current) => ({
       ...current,
       packingItems: isNew
         ? [...current.packingItems, item]
         : current.packingItems.map((currentItem) => currentItem.id === item.id ? item : currentItem),
     }));
-    setEditor(null);
+    if (accepted) setEditor(null);
   };
 
   const removeItem = (id: string) => {
-    update((current) => ({
+    const accepted = update((current) => ({
       ...current,
       packingItems: current.packingItems.filter((item) => item.id !== id),
     }));
-    setDeletingId(null);
+    if (accepted) setDeletingId(null);
   };
 
   return (
@@ -232,7 +237,7 @@ export default function PackingView({ snapshot, update }: Props) {
           <strong>{packedCount} / {items.length}</strong>
           <span>packed</span>
         </div>
-        <button type="button" className="packing-add-button" onClick={openAdd}><Plus size={16} /> Add item</button>
+        <MutationButton type="button" className="packing-add-button" onClick={openAdd}><Plus size={16} /> Add item</MutationButton>
       </div>
 
       <div className="packing-filters" role="toolbar" aria-label="Packing filters">
@@ -262,7 +267,7 @@ export default function PackingView({ snapshot, update }: Props) {
               <ul className="packing-list">
                 {categoryItems.map((item) => (
                   <li className={`packing-row${item.packed ? " is-packed" : ""}`} key={item.id}>
-                    <button
+                    <MutationButton
                       type="button"
                       className="packing-check"
                       aria-label={`Mark ${item.name} ${item.packed ? "unpacked" : "packed"}`}
@@ -270,7 +275,7 @@ export default function PackingView({ snapshot, update }: Props) {
                       onClick={() => togglePacked(item.id)}
                     >
                       {item.packed && <Check size={15} strokeWidth={3} aria-hidden="true" />}
-                    </button>
+                    </MutationButton>
                     <div className="packing-item-copy">
                       <strong>{item.name}</strong>
                       <span>
@@ -280,15 +285,15 @@ export default function PackingView({ snapshot, update }: Props) {
                       </span>
                     </div>
                     <div className="packing-row-actions">
-                      <button type="button" className="packing-row-button" onClick={() => { setDeletingId(null); setEditor({ item, isNew: false }); }} aria-label={`Edit ${item.name}`} title="Edit item"><Pencil size={15} /></button>
+                      <MutationButton type="button" className="packing-row-button" onClick={() => { setDeletingId(null); setEditor({ item, isNew: false }); }} aria-label={`Edit ${item.name}`} title="Edit item"><Pencil size={15} /></MutationButton>
                       {deletingId === item.id ? (
                         <span className="packing-confirm" role="group" aria-label={`Confirm deleting ${item.name}`}>
                           <span>Delete?</span>
-                          <button type="button" className="packing-confirm-delete" onClick={() => removeItem(item.id)}>Delete</button>
+                          <MutationButton type="button" className="packing-confirm-delete" onClick={() => removeItem(item.id)}>Delete</MutationButton>
                           <button type="button" className="packing-confirm-cancel" onClick={() => setDeletingId(null)}>Cancel</button>
                         </span>
                       ) : (
-                        <button type="button" className="packing-row-button packing-delete" onClick={() => setDeletingId(item.id)} aria-label={`Delete ${item.name}`} title="Delete item"><Trash2 size={15} /></button>
+                        <MutationButton type="button" className="packing-row-button packing-delete" onClick={() => setDeletingId(item.id)} aria-label={`Delete ${item.name}`} title="Delete item"><Trash2 size={15} /></MutationButton>
                       )}
                     </div>
                   </li>
@@ -302,7 +307,7 @@ export default function PackingView({ snapshot, update }: Props) {
           <PackageCheck size={25} aria-hidden="true" />
           <strong>{items.length ? "Nothing matches this filter" : "Your packing list is empty"}</strong>
           <span>{items.length ? "Try another filter or bag." : "Add the first thing you want to take."}</span>
-          <button type="button" className="packing-empty-action" onClick={openAdd}><Plus size={15} /> Add item</button>
+          <MutationButton type="button" className="packing-empty-action" onClick={openAdd}><Plus size={15} /> Add item</MutationButton>
         </div>
       )}
 

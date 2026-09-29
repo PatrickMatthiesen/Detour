@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, Plus, X } from "lucide-react";
 import type { Place } from "../types";
+import { EditingNotice, MutationButton, useTripEditing } from "../trip-editing";
 
 export const uid = (prefix: string) =>
   `${prefix}-${crypto.randomUUID?.() ?? Math.random().toString(36).slice(2)}`;
@@ -12,6 +13,36 @@ export function AddPlaceModal({
   onClose: () => void;
   onAdd: (place: Place) => void;
 }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const nameInput = useRef<HTMLInputElement>(null);
+  const restoreFrame = useRef<number | null>(null);
+  const previousFocus = useRef<HTMLElement | null>(
+    typeof document !== "undefined" && document.activeElement instanceof HTMLElement ? document.activeElement : null,
+  );
+  const { canEdit } = useTripEditing();
+  useEffect(() => {
+    if (restoreFrame.current !== null) {
+      cancelAnimationFrame(restoreFrame.current);
+      restoreFrame.current = null;
+    }
+    const element = dialog.current;
+    const previousOverflow = document.body.style.overflow;
+    if (element && !element.open) {
+      if (typeof element.showModal === "function") element.showModal();
+    }
+    nameInput.current?.focus({ preventScroll: true });
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      if (element?.open && typeof element.close === "function") element.close();
+      if (previousFocus.current && document.contains(previousFocus.current)) {
+        restoreFrame.current = requestAnimationFrame(() => {
+          restoreFrame.current = null;
+          previousFocus.current?.focus({ preventScroll: true });
+        });
+      }
+    };
+  }, []);
   const [name, setName] = useState("");
   const [city, setCity] = useState("Tokyo");
   const [area, setArea] = useState("");
@@ -20,7 +51,7 @@ export function AddPlaceModal({
   const [notes, setNotes] = useState("");
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (!canEdit || !name.trim()) return;
     onAdd({
       id: uid("place"),
       name: name.trim(),
@@ -37,16 +68,22 @@ export function AddPlaceModal({
     });
   };
   return (
-    <div
-      className="modal-backdrop"
-      role="presentation"
+    <dialog
+      ref={dialog}
+      className="modal add-place-dialog"
+      aria-labelledby="add-place-heading"
+      onCancel={(event) => {
+        event.preventDefault();
+        onClose();
+      }}
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}
     >
-      <form className="modal" onSubmit={submit}>
+      <form onSubmit={submit}>
+        <EditingNotice />
         <div className="modal-heading">
           <div>
             <span className="overline">NEW LIBRARY ENTRY</span>
-            <h2>Add a place</h2>
+            <h2 id="add-place-heading">Add a place</h2>
             <p>Keep the idea loose. You can decide where it fits later.</p>
           </div>
           <button
@@ -62,6 +99,7 @@ export function AddPlaceModal({
           <label>
             Name
             <input
+              ref={nameInput}
               autoFocus
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -126,12 +164,12 @@ export function AddPlaceModal({
           >
             Cancel
           </button>
-          <button className="button button-primary" type="submit">
+          <MutationButton className="button button-primary" type="submit">
             <Plus size={17} /> Save place
-          </button>
+          </MutationButton>
         </div>
       </form>
-    </div>
+    </dialog>
   );
 }
 
@@ -147,6 +185,7 @@ export function EditPlaceModal({
   embedded?: boolean;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const { canEdit } = useTripEditing();
   useEffect(() => {
     if (!embedded) dialog.current?.showModal();
   }, [embedded]);
@@ -157,6 +196,7 @@ export function EditPlaceModal({
     }));
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canEdit) return;
     const durationIsValid =
       draft.durationMinutes == null ||
       (Number.isFinite(draft.durationMinutes) && draft.durationMinutes >= 1);
@@ -176,6 +216,7 @@ export function EditPlaceModal({
   };
   const form = (
     <form className="modal edit-place-modal" onSubmit={submit}>
+        <EditingNotice />
         <div className="modal-heading">
           <div>
             <span className="overline">LIBRARY ENTRY</span>
@@ -298,25 +339,19 @@ export function EditPlaceModal({
               <option value="none">None</option>
             </select>
           </label>
-          <label
-            style={{ flexDirection: "row", alignItems: "center", paddingTop: 22 }}
-          >
+          <label className="edit-place-toggle">
             <input
               type="checkbox"
               checked={!!draft.needsResearch}
               onChange={(e) => set("needsResearch", e.target.checked)}
-              style={{ width: 16, height: 16, padding: 0, accentColor: "#b9422e" }}
             />
             Needs research
           </label>
-          <label
-            style={{ flexDirection: "row", alignItems: "center", paddingTop: 22 }}
-          >
+          <label className="edit-place-toggle">
             <input
               type="checkbox"
               checked={!!draft.selected}
               onChange={(e) => set("selected", e.target.checked)}
-              style={{ width: 16, height: 16, padding: 0, accentColor: "#b9422e" }}
             />
             Chosen for trip
           </label>
@@ -396,9 +431,9 @@ export function EditPlaceModal({
           >
             Cancel
           </button>
-          <button className="button button-primary" type="submit">
+          <MutationButton className="button button-primary" type="submit">
             <Check size={17} /> Save changes
-          </button>
+          </MutationButton>
         </div>
     </form>
   );

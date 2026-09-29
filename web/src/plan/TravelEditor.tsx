@@ -1,3 +1,4 @@
+import { MutationButton, EditingNotice, useTripEditing } from "../trip-editing";
 import { X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { TravelLeg } from "../types";
@@ -64,6 +65,7 @@ function durationValue(value: number | null | undefined): string {
 }
 
 export default function TravelEditor({ initial, isNew, onClose, onSave, onRemove }: TravelEditorProps) {
+  const { canEdit } = useTripEditing();
   const [draft, setDraft] = useState<TravelLeg>(() => ({
     ...initial,
     mode: initial.mode ?? (isNew ? "train" : null),
@@ -95,7 +97,7 @@ export default function TravelEditor({ initial, isNew, onClose, onSave, onRemove
       setErrors(nextErrors);
       return;
     }
-    onSave(next);
+    if (canEdit) onSave(next);
   };
 
   return (
@@ -123,13 +125,14 @@ export default function TravelEditor({ initial, isNew, onClose, onSave, onRemove
           </div>
         )}
 
+        <EditingNotice/>
         {confirmRemove ? (
           <section className="travel-editor-confirm" aria-labelledby="travel-remove-heading">
             <h3 id="travel-remove-heading">Remove journey?</h3>
             <p>This removes the journey from your plan. Any bookings stay unchanged.</p>
             <div className="travel-editor-confirm-actions">
               <button type="button" onClick={() => setConfirmRemove(false)}>Back</button>
-              <button type="button" className="travel-editor-danger" onClick={onRemove}>Remove</button>
+              <MutationButton type="button" className="travel-editor-danger" onClick={onRemove}>Remove</MutationButton>
             </div>
           </section>
         ) : (
@@ -171,14 +174,14 @@ export default function TravelEditor({ initial, isNew, onClose, onSave, onRemove
             </div>
 
             {!isNew && onRemove && (
-              <button type="button" className="travel-editor-remove" onClick={() => setConfirmRemove(true)}>Remove journey</button>
+              <MutationButton type="button" className="travel-editor-remove" onClick={() => setConfirmRemove(true)}>Remove journey</MutationButton>
             )}
           </div>
         )}
 
         <footer className="travel-editor-footer">
           <button type="button" onClick={onClose}>Cancel</button>
-          {!confirmRemove && <button type="submit" className="travel-editor-primary">{isNew ? "Add journey" : "Save journey"}</button>}
+          {!confirmRemove && <MutationButton type="submit" className="travel-editor-primary">{isNew ? "Add journey" : "Save journey"}</MutationButton>}
         </footer>
       </form>
     </dialog>

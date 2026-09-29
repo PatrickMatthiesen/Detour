@@ -1,19 +1,19 @@
-@import url('https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&family=DM+Sans:wght@400;500;600;700&display=swap');
-.new-preview {font-family:'Lato',sans-serif;color:#233044;background:#fff;font-size:15px;line-height:1.45;min-height:100vh;--design-accent:#2463eb;}
+/* Lato is loaded once by tokens.css. Keep this stylesheet focused on the explorer. */
+.new-preview {font-family:var(--font-sans);color:var(--color-ink);background:var(--color-white);font-size:15px;line-height:1.45;min-height:100vh;--design-accent:var(--color-indigo);}
 .new-preview *{box-sizing:border-box}.new-preview h1,.new-preview h2,.new-preview h3{font-family:inherit;letter-spacing:normal;line-height:1.25}.new-preview h1{font-size:24px}.new-preview h2{font-size:20px}.new-preview h3{font-size:16px}.new-preview p{font-size:14px;line-height:1.5}.new-preview button,.new-preview input,.new-preview select{font:inherit}.new-preview button{cursor:pointer}.new-preview nav{flex-direction:row}.new-preview button:focus-visible,.new-preview a:focus-visible{outline:3px solid #477ce9;outline-offset:3px}.new-preview ::selection{background:#d5e5ff}.new-preview a{color:inherit}
 @media(max-width:700px){.new-preview{font-size:14px}}
 
 .new-preview.d4-page {
-  --d4-blue: #2463eb;
-  --d4-blue-soft: #eef4ff;
-  --d4-ink: #172235;
-  --d4-muted: #667085;
-  --d4-faint: #98a2b3;
-  --d4-line: #e6eaf0;
-  background: #fff;
+  --d4-blue: var(--color-indigo);
+  --d4-blue-soft: var(--color-indigo-soft);
+  --d4-ink: var(--color-ink);
+  --d4-muted: var(--color-muted);
+  --d4-faint: var(--color-faint);
+  --d4-line: var(--color-hairline);
+  background: var(--color-white);
   color: var(--d4-ink);
   display: grid;
-  font-family: Lato, Inter, ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-sans);
   grid-template-rows: 48px minmax(0, 1fr) 60px;
   height: 100vh;
   min-height: 650px;
@@ -33,7 +33,7 @@
 }
 .d4-page h1,
 .d4-page h2 {
-  font-family: Lato, Inter, ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-sans);
   letter-spacing: -0.025em;
 }
 .d4-page button,
@@ -82,7 +82,7 @@
   justify-content: center;
 }
 .d4-header nav a {
-  border-radius: 5px;
+  border-radius:var(--radius-sm);
   color: var(--d4-muted);
   font-size: 10px;
   font-weight: 700;
@@ -173,7 +173,7 @@
   appearance: none;
   background: #fff;
   border: 1px solid var(--d4-line);
-  border-radius: 5px;
+  border-radius:var(--radius-sm);
   color: var(--d4-ink);
   cursor: pointer;
   font-size: 10px;
@@ -187,7 +187,7 @@
   align-items: center;
   background: #fff;
   border: 1px solid var(--d4-line);
-  border-radius: 5px;
+  border-radius:var(--radius-sm);
   color: var(--d4-muted);
   display: inline-flex;
   font-size: 10px;
@@ -215,7 +215,7 @@
 .d4-category-tabs button {
   background: #f7f9fc;
   border: 1px solid transparent;
-  border-radius: 12px;
+  border-radius:var(--radius-lg);
   color: var(--d4-muted);
   flex: 0 0 auto;
   font-size: 10px;
@@ -234,7 +234,7 @@
   align-items: center;
   background: #fff;
   border: 1px solid #adc5fa;
-  border-radius: 5px;
+  border-radius:var(--radius-sm);
   color: var(--d4-muted);
   display: flex;
   gap: 6px;
@@ -394,7 +394,7 @@
 .d4-details {
   background: #f8faff;
   border: 1px solid #ccdbfb;
-  border-radius: 8px;
+  border-radius:var(--radius-md);
   margin-top: auto;
   padding: 12px 13px;
   position: relative;
@@ -560,7 +560,7 @@
 .d4-view-details {
   background: #fff;
   border: 1px solid var(--d4-line);
-  border-radius: 5px;
+  border-radius:var(--radius-sm);
   color: var(--d4-ink);
   font-size: 12px;
   padding: 8px 10px;
@@ -569,7 +569,7 @@
   align-items: center;
   background: var(--d4-blue);
   border: 1px solid var(--d4-blue);
-  border-radius: 5px;
+  border-radius:var(--radius-sm);
   color: #fff;
   display: inline-flex;
   font-size: 11px;
@@ -606,7 +606,7 @@
   align-items: center;
   background: rgba(255, 255, 255, 0.95);
   border: 1px solid var(--d4-line);
-  border-radius: 6px;
+  border-radius:var(--radius-sm);
   box-shadow: 0 4px 14px rgba(26, 53, 90, 0.1);
   display: flex;
   gap: 13px;
@@ -806,20 +806,20 @@
 }
 /* Colour follows the content: coral choices, botanical greens, food gold and culture violet. */
 .d4-page[data-palette="journey"] {
-  --d4-blue:#bd493b; --d4-blue-soft:#fbe6df; --d4-ink:#30383b;
-  --d4-muted:#626b6d; --d4-faint:#737d7f; --d4-line:#e5e3dc;
+  --d4-blue:#bd493b; --d4-blue-soft:var(--color-vermilion-soft); --d4-ink:var(--color-ink);
+  --d4-muted:#626b6d; --d4-faint:#737d7f; --d4-line:var(--color-hairline);
   background:#faf9f5; grid-template-rows:48px minmax(0,1fr) auto;
 }
-.d4-page .dk-nav {background:#fffdf8;border-bottom-color:#e9e4d9;}
-.d4-page .dk-nav > a {color:#b7493b;}
-.d4-page .dk-nav nav a.dk-active {background:#fbe6df;color:#a73d32;}
-.d4-browse-panel {background:#f7f8f3;}
+.d4-page .dk-nav {background:var(--color-paper);border-bottom-color:#e9e4d9;}
+.d4-page .dk-nav > a {color:var(--color-vermilion-ink);}
+.d4-page .dk-nav nav a.dk-active {background:var(--color-vermilion-soft);color:#a73d32;}
+.d4-browse-panel {background:var(--color-canvas);}
 .d4-page .d4-selection-count {background:#f9eae5;color:var(--status-picked);font-size:11px;}
 .d4-city-tabs {grid-template-columns:repeat(4,minmax(0,1fr)) 32px;gap:8px;flex-shrink:0;}
 .d4-more-cities {background:transparent;border:0;color:var(--d4-muted);font:inherit;font-size:11px;min-width:0;align-self:start;padding-bottom:10px;}
 .d4-search-bar {position:relative;min-height:42px;margin-bottom:12px;flex-shrink:0;color:#798884;}
-.d4-search-bar select {align-self:stretch;background:#e8efeb;border:0;border-right:1px solid #d6ddd8;padding:0 9px;font:inherit;font-size:12px;color:#365a4e;max-width:105px;}
-.d4-search-bar input {display:block;min-width:0;width:100%;height:42px;background:#fff;border:1px solid #d6ddd8;border-radius:9px;padding:10px 12px 10px 38px;font-size:13px;box-shadow:none;}
+.d4-search-bar select {align-self:stretch;background:#e8efeb;border:0;border-right:1px solid var(--color-hairline);padding:0 9px;font:inherit;font-size:12px;color:#365a4e;max-width:105px;}
+.d4-search-bar input {display:block;min-width:0;width:100%;height:42px;background:#fff;border:1px solid var(--color-hairline);border-radius:9px;padding:10px 12px 10px 38px;font-size:13px;box-shadow:none;}
 .d4-page .d4-search-bar input:focus {outline:2px solid #81ada0;outline-offset:1px;box-shadow:none;}
 .d4-page [data-category] {--category-ink:#526e77;--category-bg:#e7eff1;}
 .d4-page [data-category="Food"] {--category-ink:#875a17;--category-bg:#faeac6;}
@@ -836,15 +836,15 @@
 .d4-card-copy {border-top:3px solid var(--category-bg);}
 .d4-place-card.is-selected {border-color:var(--status-picked);}
 .d4-place-card:hover,.d4-place-card.is-focused {border-color:#b7c9bf;box-shadow:0 3px 10px #33483910;}
-.d4-inspector-select:hover,.d4-inspector-select.is-selected {background:#983d34;border-color:#983d34;}
+.d4-inspector-select:hover,.d4-inspector-select.is-selected {background:var(--color-vermilion-ink);border-color:var(--color-vermilion-ink);}
 .d4-inspector-area {text-transform:none;letter-spacing:0;font-size:12px;}
-.d4-stays {background:#fffdf8;grid-template-columns:40px minmax(0,1fr);gap:7px 10px;padding:10px 14px;overflow:visible;}
+.d4-stays {background:var(--color-paper);grid-template-columns:40px minmax(0,1fr);gap:7px 10px;padding:10px 14px;overflow:visible;}
 .d4-stays-label {grid-row:1 / span 2;align-self:center;}
 .d4-route-heading {grid-column:2;display:flex;align-items:center;justify-content:space-between;gap:12px;color:var(--d4-muted);font-size:11px;}
 .d4-route-heading>span,.d4-transport-bookings summary {display:flex;align-items:center;gap:5px;}
 .d4-transport-bookings {position:relative;}
 .d4-transport-bookings summary {cursor:pointer;text-decoration:underline;text-underline-offset:3px;}
-.d4-transport-summary {position:absolute;bottom:100%;right:0;z-index:5;width:270px;padding:12px;background:white;border:1px solid #d6ddd8;border-radius:6px;box-shadow:0 3px 12px #263b591a;}
+.d4-transport-summary {position:absolute;bottom:100%;right:0;z-index:5;width:270px;padding:12px;background:white;border:1px solid var(--color-hairline);border-radius:var(--radius-sm);box-shadow:0 3px 12px #263b591a;}
 .d4-transport-summary>div {display:flex;align-items:center;gap:7px;margin-bottom:8px;color:var(--item-status);}
 .d4-transport-summary p {margin:0;font-size:11px;line-height:1.5;}
 .d4-page [data-status="saved"] {--item-status:var(--status-saved);}
@@ -878,4 +878,4 @@
 
 .d4-stays-list {gap:8px 17px;}
 .d4-stay {position:relative;overflow:visible;}
-.d4-stay:not(:last-child)::after {content:"ÔåÆ";position:absolute;right:-15px;top:50%;transform:translateY(-50%);color:#758981;font-size:14px;}
+.d4-stay:not(:last-child)::after {content:"→";position:absolute;right:-15px;top:50%;transform:translateY(-50%);color:var(--color-muted);font-size:14px;}

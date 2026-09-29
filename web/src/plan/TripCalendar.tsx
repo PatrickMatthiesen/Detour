@@ -10,6 +10,7 @@ import { createPortal } from "react-dom";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { daySummary, datesForTrip } from "./planning";
 import type { TripSnapshot } from "../types";
+import { dateParts, formatDateTime } from "../format";
 import "./TripCalendar.css";
 
 export type DayIndicatorVariant = "icons" | "dots" | "labels";
@@ -51,26 +52,7 @@ const datePart = (value: string | null | undefined) => {
 };
 
 const dateInfo = (date: string): CalendarDate => {
-  const value = new Date(`${date}T12:00:00Z`);
-  const weekday = new Intl.DateTimeFormat("en-US", {
-    weekday: "long",
-    timeZone: "UTC",
-  }).format(value);
-  const month = new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    timeZone: "UTC",
-  }).format(value);
-  const day = new Intl.DateTimeFormat("en-US", {
-    day: "numeric",
-    timeZone: "UTC",
-  }).format(value);
-  return {
-    date,
-    weekday,
-    month,
-    day,
-    label: `${weekday}, ${month} ${day}`,
-  };
+  return dateParts(date);
 };
 
 const activityName = (snapshot: TripSnapshot, activity: TripSnapshot["activities"][number]) =>
@@ -128,27 +110,7 @@ const localDateForTimestamp = (value: string | null | undefined, timeZone: strin
 
 const formatTimestamp = (value: string | null | undefined, timeZone: string | null | undefined) => {
   if (!value) return null;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return dateInfo(value).label;
-  const hasOffset = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(value);
-  if (!hasOffset) {
-    const match = value.match(/^(\d{4}-\d{2}-\d{2})T(\d{1,2}:\d{2})/);
-    if (!match) return value;
-    return `${dateInfo(match[1]).label} at ${match[2]}`;
-  }
-  const instant = Date.parse(value);
-  if (!Number.isFinite(instant)) return value;
-  try {
-    return new Intl.DateTimeFormat("en-US", {
-      timeZone: timeZone?.trim() || "Asia/Tokyo",
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: false,
-    }).format(new Date(instant));
-  } catch {
-    return value;
-  }
+  return formatDateTime(value, timeZone?.trim() || "Asia/Tokyo");
 };
 
 const formatDuration = (minutes: number | null | undefined) => {

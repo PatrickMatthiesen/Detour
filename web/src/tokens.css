@@ -1,0 +1,38 @@
+@import url('https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&display=swap');
+
+:root {
+  --font-sans: Lato, system-ui, sans-serif;
+  --color-ink: #273535;
+  --color-muted: #586760;
+  --color-faint: #586760;
+  --color-hairline: #dfe4dc;
+  --color-paper: #fbfaf6;
+  --color-canvas: #f7f8f3;
+  --color-white: #fff;
+  --color-vermilion: #b94f3f;
+  --color-vermilion-ink: #a33f32;
+  --color-vermilion-soft: #f6e2dc;
+  --color-indigo: #426b80;
+  --color-indigo-soft: #e4edf0;
+  --color-moss: #58765f;
+  --color-moss-ink: #42664b;
+  --color-moss-soft: #e4eee5;
+  --color-gold: #805a1c;
+  --color-gold-soft: #f5edda;
+  --radius-sm: 5px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 999px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  font-family: var(--font-sans);
+  color: var(--color-ink);
+  background: var(--color-canvas);
+  font-synthesis: none;
+  font-variant-numeric: tabular-nums;
+  text-rendering: optimizeLegibility;
+}

@@ -10,6 +10,7 @@ import {
   Plane,
   TrainFront,
   Search,
+  Plus,
 } from "lucide-react";
 import { DesignMap } from "../map/design-map";
 import PlacePhoto from "../photos/PlacePhoto";
@@ -19,6 +20,7 @@ import PlaceDetails from "../plan/PlaceDetails";
 import { usePlacesDrawer } from "./use-places-drawer";
 import { useRecentCities } from "./recent-cities";
 import { buildRouteStops, summarizeCityStops, STATUS_COLORS } from "./route-status";
+import { MutationButton } from "../trip-editing";
 import "./places-explorer.css";
 import "./places-drawer.css";
 
@@ -170,7 +172,7 @@ export function PlacesExplorer({trip, selected, toggle, loading, error, header, 
             <div>
               <h1>Places</h1>
             </div>
-            <div className="d4-head-actions"><button className="d4-selection-count" aria-pressed={selectedOnly} aria-label={selectedOnly ? "Show all saved places" : "Show places added to trip"} title={selectedOnly ? "Show all saved places" : "Filter to places added to this trip"} onClick={() => updateFilters({chosen: selectedOnly ? undefined : true})}>Added to trip ({selected.size})</button>{onAdd && <button onClick={onAdd}>+ Add place</button>}</div>
+            <div className="d4-head-actions"><button className="d4-selection-count" aria-pressed={selectedOnly} aria-label={selectedOnly ? "Show all saved places" : "Show places added to trip"} title={selectedOnly ? "Show all saved places" : "Filter to places added to this trip"} onClick={() => updateFilters({chosen: selectedOnly ? undefined : true})}>Added to trip ({selected.size})</button>{onAdd && <MutationButton onClick={onAdd}><Plus size={15} aria-hidden="true" /> Add place</MutationButton>}</div>
           </div>
           <div className="d4-city-tabs" role="tablist" aria-label="Browse city" style={{gridTemplateColumns:`repeat(${recentCities.length + 1},minmax(0,1fr)) 62px`}}>
             {["All", ...recentCities].map((item) => {
@@ -248,7 +250,7 @@ export function PlacesExplorer({trip, selected, toggle, loading, error, header, 
                         <span>{placeDescription(place)}</span>
                       </span>
                     </button>
-                    <button
+                    <MutationButton
                       type="button"
                       className="d4-card-check"
                       onClick={() => toggle(place.id)}
@@ -256,7 +258,7 @@ export function PlacesExplorer({trip, selected, toggle, loading, error, header, 
                       aria-pressed={isSelected}
                     >
                       {isSelected && <Check size={14} strokeWidth={3} />}
-                    </button>
+                    </MutationButton>
                   </article>
                 );
               })}

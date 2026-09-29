@@ -186,6 +186,10 @@ function isAccommodationBooking(booking: Booking): boolean {
     kind === "ryokan" || kind === "guesthouse" || kind === "apartment" || kind === "airbnb";
 }
 
+export function isCheckoutDay(booking: Booking, date: string, timeZone?: string | null): boolean {
+  return !isCancelled(booking.status) && isAccommodationBooking(booking) && calendarDate(booking.checkOut, timeZone) === date;
+}
+
 function bookingBelongsOnDate(booking: Booking, date: string, timeZone: string | null | undefined): boolean {
   // Date-only values carry their source calendar date and must never be parsed
   // as UTC instants. Each field is an independent reason for inclusion.
