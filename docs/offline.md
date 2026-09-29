@@ -16,7 +16,7 @@ Adding a home-screen shortcut alone does not download trip data. Safari and its 
 
 ## Storage and reconnecting
 
-Offline mode shows a disconnected icon and disables changes. The download icon changes to a check once the app and current trip are saved. Select the icon to retry or reconnect. Reconnect checks the session before reloading server data. An explicit authentication rejection does not unlock an old offline copy. Signing out, an unauthenticated session response, or a different account removes the saved trip. The cache contains private trip information, including booking PINs, and remains readable on that device while signed in.
+Offline mode shows a disconnected icon and disables changes. The download icon changes to a check once the app and current trip are saved. Select the icon to retry or reconnect. Reconnect checks the session before reloading server data. An explicit authentication rejection does not unlock an old offline copy. Successful sign-out, an unauthenticated session response, or a different account removes the saved trip. Sign-out requires a connection; if it fails, the app reports the error and keeps the session and saved trip. The cache contains private trip information, including booking PINs, and remains readable on that device while signed in.
 
 Storage failures appear in the app and do not prevent online editing. Clearing browser data or browser storage eviction removes the offline copy. An unsuccessful edit is never persisted as confirmed trip data.
 
