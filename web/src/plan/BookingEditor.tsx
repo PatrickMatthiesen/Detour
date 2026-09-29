@@ -1,3 +1,4 @@
+import { MutationButton, EditingNotice, useTripEditing } from "../trip-editing";
 import { X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { Booking } from "../types";
@@ -154,6 +155,7 @@ function BookingTime({label,value,timeZone,onChange}:{label:string;value?:string
 }
 
 export default function BookingEditor({ initial, isNew, timeZone, onClose, onSave }: BookingEditorProps) {
+  const { canEdit } = useTripEditing();
   const [draft, setDraft] = useState<Booking>(() => ({ ...initial }));
   const [errors, setErrors] = useState<string[]>([]);
   const dialog = useRef<HTMLDialogElement>(null);
@@ -199,7 +201,7 @@ export default function BookingEditor({ initial, isNew, timeZone, onClose, onSav
       setErrors(nextErrors);
       return;
     }
-    onSave(next);
+    if (canEdit) onSave(next);
   };
 
   return (
@@ -223,6 +225,7 @@ export default function BookingEditor({ initial, isNew, timeZone, onClose, onSav
           </button>
         </header>
 
+        <EditingNotice/>
         {errors.length > 0 && (
           <div className="booking-editor-errors" role="alert" aria-live="polite">
             <strong>Check these details</strong>
@@ -309,7 +312,7 @@ export default function BookingEditor({ initial, isNew, timeZone, onClose, onSav
 
         <footer className="booking-editor-footer">
           <button type="button" onClick={onClose}>Cancel</button>
-          <button type="submit" className="booking-editor-primary">{isNew ? "Add booking" : "Save booking"}</button>
+          <MutationButton type="submit" className="booking-editor-primary">{isNew ? "Add booking" : "Save booking"}</MutationButton>
         </footer>
       </form>
     </dialog>

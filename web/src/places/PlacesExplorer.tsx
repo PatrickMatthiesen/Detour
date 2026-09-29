@@ -10,22 +10,21 @@ import {
   Plane,
   TrainFront,
   Search,
+  Plus,
 } from "lucide-react";
-import {
-  DesignMap,
-  PlacePhoto,
-  PreviewNav,
-  cityPlaces,
-  shortDate,
-  useDesignTrip,
-} from "./design-kit";
+import { DesignMap } from "../map/design-map";
+import PlacePhoto from "../photos/PlacePhoto";
+import { shortDate } from "../format";
 import type { Place, TripSnapshot } from "../types";
 import PlaceDetails from "../plan/PlaceDetails";
 import { usePlacesDrawer } from "./use-places-drawer";
 import { useRecentCities } from "./recent-cities";
 import { buildRouteStops, summarizeCityStops, STATUS_COLORS } from "./route-status";
-import "./four.css";
+import { MutationButton } from "../trip-editing";
+import "./places-explorer.css";
 import "./places-drawer.css";
+
+function cityPlaces(trip:TripSnapshot|null,city:string){return trip?.places.filter(p=>!city||city==='All'||city==='All cities'||p.city===city)??[]}
 
 function placeDescription(place: Place) {
   return (
@@ -57,11 +56,6 @@ function TransportBookings({trip}:{trip:TripSnapshot|null}) {
       <p>Recorded bookings only. Accommodation status does not include transport.</p>
     </div>
   </details>;
-}
-
-export default function ConceptFour() {
-  const state = useDesignTrip();
-  return <PlacesExplorer {...state} />;
 }
 
 export function PlacesExplorer({trip, selected, toggle, loading, error, header, onAdd, onEdit, renderEdit}: {trip:TripSnapshot|null;selected:Set<string>;toggle:(id:string)=>void;loading:boolean;error:string;header?:ReactNode;onAdd?:()=>void;onEdit?:(place:Place)=>void;renderEdit?:(place:Place,onClose:()=>void)=>ReactNode}) {
@@ -162,7 +156,7 @@ export function PlacesExplorer({trip, selected, toggle, loading, error, header, 
 
   return (
     <><div className="new-preview d4-page" data-palette="journey" style={statusVariables}>
-      {header ?? <PreviewNav active={4} />}
+      {header ?? null}
 
       <div className={`d4-workspace d4-drawer-workspace${drawer.collapsed ? " is-collapsed" : ""}`} ref={drawer.workspaceRef}>
         <aside className="d4-browse-panel d4-drawer" ref={panel} style={drawer.style} data-snap={drawer.snap} aria-label="Places panel">
@@ -178,7 +172,7 @@ export function PlacesExplorer({trip, selected, toggle, loading, error, header, 
             <div>
               <h1>Places</h1>
             </div>
-            <div className="d4-head-actions"><button className="d4-selection-count" aria-pressed={selectedOnly} aria-label={selectedOnly ? "Show all saved places" : "Show places added to trip"} title={selectedOnly ? "Show all saved places" : "Filter to places added to this trip"} onClick={() => updateFilters({chosen: selectedOnly ? undefined : true})}>Added to trip ({selected.size})</button>{onAdd && <button onClick={onAdd}>+ Add place</button>}</div>
+            <div className="d4-head-actions"><button className="d4-selection-count" aria-pressed={selectedOnly} aria-label={selectedOnly ? "Show all saved places" : "Show places added to trip"} title={selectedOnly ? "Show all saved places" : "Filter to places added to this trip"} onClick={() => updateFilters({chosen: selectedOnly ? undefined : true})}>Added to trip ({selected.size})</button>{onAdd && <MutationButton onClick={onAdd}><Plus size={15} aria-hidden="true" /> Add place</MutationButton>}</div>
           </div>
           <div className="d4-city-tabs" role="tablist" aria-label="Browse city" style={{gridTemplateColumns:`repeat(${recentCities.length + 1},minmax(0,1fr)) 62px`}}>
             {["All", ...recentCities].map((item) => {
@@ -256,7 +250,7 @@ export function PlacesExplorer({trip, selected, toggle, loading, error, header, 
                         <span>{placeDescription(place)}</span>
                       </span>
                     </button>
-                    <button
+                    <MutationButton
                       type="button"
                       className="d4-card-check"
                       onClick={() => toggle(place.id)}
@@ -264,7 +258,7 @@ export function PlacesExplorer({trip, selected, toggle, loading, error, header, 
                       aria-pressed={isSelected}
                     >
                       {isSelected && <Check size={14} strokeWidth={3} />}
-                    </button>
+                    </MutationButton>
                   </article>
                 );
               })}

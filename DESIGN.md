@@ -10,14 +10,14 @@ Operate. The first job is to understand what is saved, what is selected, and wha
 
 ## Palette and type
 
-- Canvas: pale rice `#F5F1E8`; primary ink `#17211D`; muted ink `#68736D`; hairline `#D9D4C8`.
-- Vermilion `#B9422E` marks decisions and active selections. Indigo `#315A72` carries travel. Moss `#58725C` marks ready/packed.
-- Display: `DM Serif Display`; body: `IBM Plex Sans`; numbers and times use tabular figures in the body face.
-- Prefer solid surfaces and 12–16px radii. Shadows are soft and offset; borders remain light.
+- Canvas: soft paper `#F7F8F3`; primary ink `#273535`; muted ink `#586760`; hairline `#DFE4DC`.
+- Vermilion `#B94F3F` marks decisions and active selections. Indigo `#426B80` carries travel. Moss `#58765F` marks ready/packed.
+- Use `Lato` for headings, body text, and controls, with `system-ui, sans-serif` as fallbacks. Distinguish headings through size and weight; numbers and times use tabular figures.
+- Prefer solid surfaces and 8–12px radii. Shadows are soft and offset; borders remain light.
 
 ## Composition
 
-Desktop opens with a narrow rail-like sidebar and a two-column workspace: place library on the left, geographic context on the right. The app bar names the active trip and gives one clear add action. Mobile collapses into a top bar and bottom navigation; map context becomes a drawer or shorter lower section.
+Desktop opens with a compact top navigation bar naming the active trip and the three working modes. Places uses a two-pane workspace with browse controls in a drawer on the left and geographic context on the right. Plan and Prepare use a single paper workspace with clear sections and date or attention controls. Mobile keeps the top bar, turns the Places pane into a snap-point drawer, and lets Plan and Prepare flow as a single column.
 
 ## Signature interaction
 
@@ -29,6 +29,6 @@ Saved places are paper rows, selected places carry a vermilion check and label, 
 
 ## Surface contracts
 
-- Library: browse, filter, group, select, and add places quickly.
-- Itinerary: show date spine, stays, travel, scheduled items, unallocated selections, and accommodation gaps.
-- Preparation: combine tasks and packing with due/packed progress.
+- Places: browse, filter, group, select, and add places quickly while keeping the map visible.
+- Plan: show date spine, stays, travel, scheduled items, unallocated selections, and accommodation gaps.
+- Prepare: combine tasks and packing with due/packed progress.

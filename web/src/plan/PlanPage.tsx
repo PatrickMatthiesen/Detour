@@ -12,8 +12,11 @@ import {
   TrainFront,
   Ticket,
 } from "lucide-react";
-import { displayPlaces, photoFor, PlacePhoto, shortDate } from "../mockups/design-kit";
-import { daySummary, datesForTrip } from "./planning";
+import { displayPlaces } from "../places/displayPlaces";
+import { formatDateTime, longDate, shortDate, weekday } from "../format";
+import { photoFor } from "../photos/place-photo";
+import PlacePhoto from "../photos/PlacePhoto";
+import { daySummary, datesForTrip, isCheckoutDay } from "./planning";
 import type { Activity, Booking, Place, TravelLeg, TripSnapshot } from "../types";
 import TripCalendar, { DayIndicators } from "./TripCalendar";
 import "./plan.css";
@@ -23,25 +26,12 @@ import BookingsPanel from "./BookingsPanel";
 import TravelEditor from "./TravelEditor";
 import JourneysPanel from "./JourneysPanel";
 import PlaceDetails from "./PlaceDetails";
+import { MutationButton, MutationInput } from "../trip-editing";
 
 export type PlanPageProps = {
   snapshot: TripSnapshot;
-  update: (fn: (s: TripSnapshot) => TripSnapshot) => void;
+  update: (fn: (s: TripSnapshot) => TripSnapshot) => boolean;
 };
-
-const formatDay = (date: string) =>
-  new Intl.DateTimeFormat("en-US", {
-    weekday: "short",
-    timeZone: "UTC",
-  }).format(new Date(`${date}T12:00:00Z`));
-
-const formatLongDay = (date: string) =>
-  new Intl.DateTimeFormat("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(`${date}T12:00:00Z`));
 
 const placeCopy = (place: Place) =>
   place.description || place.notes?.split("\n")[0] || "A saved idea waiting for a closer look.";
@@ -58,22 +48,12 @@ const formatBookingSource = (source: string, timeZone?: string | null) => {
   }
   const instant = Date.parse(source);
   if (!Number.isFinite(instant)) return source;
-  try {
-    return new Intl.DateTimeFormat("en-GB", {
-      day: "numeric",
-      month: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-      timeZone: timeZone || "Asia/Tokyo",
-    }).format(new Date(instant));
-  } catch {
-    return source;
-  }
+  return formatDateTime(source, timeZone || "Asia/Tokyo");
 };
 
 const bookingWhen = (booking: Booking, timeZone?: string | null) => {
   if (booking.checkIn) {
-    return `Check-in ${shortDate(booking.checkIn)}${booking.checkOut ? ` · check-out ${shortDate(booking.checkOut)}` : ""}`;
+    return `Check-in ${formatBookingSource(booking.checkIn, timeZone)}${booking.checkOut ? ` · check-out ${formatBookingSource(booking.checkOut, timeZone)}` : ""}`;
   }
   if (booking.start && booking.end) {
     return `${formatBookingSource(booking.start, timeZone)} – ${formatBookingSource(booking.end, timeZone)}`;
@@ -82,7 +62,8 @@ const bookingWhen = (booking: Booking, timeZone?: string | null) => {
   return source ? formatBookingSource(source, timeZone) : "Date unknown";
 };
 
-function Commitment({ booking, timeZone, onEdit }: { booking: Booking; timeZone?: string | null; onEdit:()=>void }) {
+export function Commitment({ booking, date, timeZone, onEdit }: { booking: Booking; date: string; timeZone?: string | null; onEdit:()=>void }) {
+  const checkoutToday = isCheckoutDay(booking, date, timeZone);
   return (
     <div className={`plan-commitment plan-booking-${booking.kind}`}>
       <span className="plan-commitment-icon" aria-hidden="true">
@@ -91,7 +72,7 @@ function Commitment({ booking, timeZone, onEdit }: { booking: Booking; timeZone?
       <span className="plan-commitment-copy">
         <button type="button" className="plan-booking-link" onClick={onEdit}>{booking.title}</button>
         <small>
-          {booking.kind === "hotel" ? "Accommodation" : booking.kind || "Booking"}
+          {checkoutToday ? "Checking out today" : booking.kind === "hotel" ? "Accommodation" : booking.kind || "Booking"}
           {booking.location ? ` · ${booking.location}` : ""}
           {booking.status ? ` · ${booking.status}` : ""}
           {` · ${bookingWhen(booking, timeZone)}`}
@@ -139,7 +120,7 @@ function ActivityRow({
       </div>
       <label className="plan-field plan-time-field">
         <span>Starts</span>
-        <input
+        <MutationInput
           type="time"
           value={startTime}
           onChange={(event) => setStartTime(event.target.value)}
@@ -149,7 +130,7 @@ function ActivityRow({
       </label>
       <label className="plan-field plan-duration-field">
         <span>Minutes</span>
-        <input
+        <MutationInput
           type="number"
           min="1"
           inputMode="numeric"
@@ -163,9 +144,9 @@ function ActivityRow({
           aria-label={`Duration for ${place?.name || activity.title || "activity"}`}
         />
       </label>
-      <button type="button" className="plan-icon-button plan-remove" onClick={remove} aria-label={`Remove ${place?.name || activity.title || "activity"}`}>
+      <MutationButton type="button" className="plan-icon-button plan-remove" onClick={remove} aria-label={`Remove ${place?.name || activity.title || "activity"}`}>
         <Trash2 size={15} />
-      </button>
+      </MutationButton>
     </article>
   );
 }
@@ -280,7 +261,7 @@ export default function PlanPage({ snapshot, update }: PlanPageProps) {
               <span>{shortDate(stay.checkIn)} – {shortDate(stay.checkOut)}</span>
 
             </button>
-          )) : <button type="button" className="plan-calendar-switch" onClick={()=>setStayEditor({})}><Plus size={15}/> Add city</button>}
+          )) : <MutationButton type="button" className="plan-calendar-switch" onClick={()=>setStayEditor({})}><Plus size={15}/> Add city</MutationButton>}
         </div>
       </section>
 
@@ -290,8 +271,8 @@ export default function PlanPage({ snapshot, update }: PlanPageProps) {
         <div className="plan-date-list">
           {dates.slice(Math.max(0, Math.min(index - 3, dates.length - 7)), Math.max(0, Math.min(index - 3, dates.length - 7)) + 7).map((item) => (
             <button type="button" key={item} data-plan-date={item} aria-label={shortDate(item)} className={`plan-date${item === date ? " is-active" : ""}`} onClick={() => setFocusedDate(item)} aria-current={item === date ? "date" : undefined}>
-              <span>{formatDay(item)}</span>
-              <strong>{new Date(`${item}T12:00:00Z`).getUTCDate()}</strong>
+              <span>{weekday(item)}</span>
+              <strong>{Number(item.slice(8, 10))}</strong>
               <DayIndicators snapshot={snapshot} date={item}/>
             </button>
           ))}
@@ -304,7 +285,7 @@ export default function PlanPage({ snapshot, update }: PlanPageProps) {
         <section className="plan-day-column" aria-labelledby="focused-day-heading">
           <div className="plan-day-heading">
             <div className="plan-day-title">
-              <h1 id="focused-day-heading">{date ? formatLongDay(date) : "Choose a day"}</h1>
+              <h1 id="focused-day-heading">{date ? longDate(date) : "Choose a day"}</h1>
               <p>{summary.cities.length ? summary.cities.join(" · ") : "No city stay assigned"}</p>
             </div>
             <div className={`plan-capacity${summary.knownMinutes > 720 ? " is-over" : ""}`} title="Known bookings and activities within 09:00–21:00, plus unscheduled visit and journey durations.">
@@ -317,10 +298,10 @@ export default function PlanPage({ snapshot, update }: PlanPageProps) {
             <div className="plan-section-head"><span>Commitments</span><div className="plan-commitment-tools"><button type="button" className="plan-booking-link" onClick={()=>setJourneysOpen(true)}>Journeys</button><button type="button" className="plan-booking-link" onClick={()=>setBookingsOpen(true)}>Bookings</button></div></div>
             {currentStays.map((stay) => <div className="plan-commitment plan-stay-commitment" key={stay.id}><span className="plan-commitment-icon"><Hotel size={15} /></span><span className="plan-commitment-copy"><strong>{stay.name || `Stay in ${stay.city}`}</strong><small>Planned stay · {stay.city}</small></span></div>)}
             {summary.travelLegs.map((leg) => <div className="plan-commitment plan-travel-commitment" key={leg.id}><span className="plan-commitment-icon"><TrainFront size={15} /></span><span className="plan-commitment-copy"><button type="button" className="plan-booking-link" onClick={()=>setTravelDraft({leg,isNew:false})}>{leg.from} → {leg.to}</button><small>{leg.mode || "Travel"} · {durationLabel(leg.durationMinutes)}{leg.estimated ? " · estimated" : ""}</small></span></div>)}
-            {dateBookings.map((booking) => <Commitment booking={booking} timeZone={snapshot.trip.timeZone} onEdit={()=>setBookingDraft({booking,isNew:false})} key={booking.id} />)}
+            {dateBookings.map((booking) => <Commitment booking={booking} date={date} timeZone={snapshot.trip.timeZone} onEdit={()=>setBookingDraft({booking,isNew:false})} key={booking.id} />)}
             {(summary.accommodationCovered || (date >= (snapshot.trip.arrival?.date || snapshot.trip.startDate) && date < (snapshot.trip.departure?.date || snapshot.trip.endDate))) && <p className={`plan-lodging-status${summary.accommodationCovered ? " is-covered" : ""}`}>
               <Hotel size={13} /> {summary.accommodationCovered ? "Confirmed accommodation covers this night" : `No confirmed accommodation for the night of ${shortDate(date)}`}
-              {!summary.accommodationCovered && onAddAccommodation && <button type="button" onClick={()=>onAddAccommodation(date,currentStays[0]?.city || summary.cities[0] || "")}>Add accommodation</button>}
+              {!summary.accommodationCovered && onAddAccommodation && <MutationButton type="button" onClick={()=>onAddAccommodation(date,currentStays[0]?.city || summary.cities[0] || "")}>Add accommodation</MutationButton>}
             </p>}
             {!currentStays.length && !summary.travelLegs.length && !dateBookings.length && <p className="plan-empty">Nothing committed for this day yet.</p>}
           </div>
@@ -349,7 +330,7 @@ export default function PlanPage({ snapshot, update }: PlanPageProps) {
               return <article className={`plan-place-row${place.selected ? " is-selected" : ""}${photoFor(place).photo?.url ? "" : " no-photo"}`} key={place.id}>
                 {photoFor(place).photo?.url && <PlacePhoto place={place} className="plan-place-photo" />}
                 <div className="plan-place-copy">
-                  <div className="plan-place-title"><button type="button" className="plan-place-detail-link" onClick={()=>setDetailPlace(place)}>{place.name}</button><button type="button" className={`plan-add-icon${scheduled ? " is-added" : ""}`} aria-label={scheduled ? `Remove ${place.name} from ${shortDate(date)}` : `Add ${place.name} to ${shortDate(date)}`} title={scheduled ? "Remove from this day" : "Add to this day"} aria-pressed={scheduled} onClick={()=>scheduled ? update(current=>({...current,activities:current.activities.filter(activity=>!(activity.placeId===place.id && activity.date===date && activity.status!=="cancelled"))})) : addToDay(place)}>{scheduled ? <Check size={18}/> : <Plus size={18}/>}</button></div>
+                  <div className="plan-place-title"><button type="button" className="plan-place-detail-link" onClick={()=>setDetailPlace(place)}>{place.name}</button><MutationButton type="button" className={`plan-add-icon${scheduled ? " is-added" : ""}`} aria-label={scheduled ? `Remove ${place.name} from ${shortDate(date)}` : `Add ${place.name} to ${shortDate(date)}`} title={scheduled ? "Remove from this day" : "Add to this day"} aria-pressed={scheduled} onClick={()=>scheduled ? update(current=>({...current,activities:current.activities.filter(activity=>!(activity.placeId===place.id && activity.date===date && activity.status!=="cancelled"))})) : addToDay(place)}>{scheduled ? <Check size={18}/> : <Plus size={18}/>}</MutationButton></div>
                   <span className="plan-place-meta"><MapPin size={12} />{place.city}{place.area ? ` · ${place.area}` : ""} · {durationLabel(place.durationMinutes)}</span>
                   <p>{placeCopy(place)}</p>
 
@@ -361,11 +342,11 @@ export default function PlanPage({ snapshot, update }: PlanPageProps) {
         </aside>
       </div>
       </>}
-      {stayEditor && <StayEditor snapshot={snapshot} initialId={stayEditor.id} onClose={()=>setStayEditor(null)} onSave={stays=>{update(current=>({...current,stays}));setStayEditor(null);}}/>}
+      {stayEditor && <StayEditor snapshot={snapshot} initialId={stayEditor.id} onClose={()=>setStayEditor(null)} onSave={stays=>{if(update(current=>({...current,stays})))setStayEditor(null);}}/>}
       {bookingsOpen && <BookingsPanel snapshot={snapshot} onClose={()=>setBookingsOpen(false)} onEdit={booking=>setBookingDraft({booking,isNew:false})} onAdd={onAddAccommodation}/>}
-      {bookingDraft && <BookingEditor initial={bookingDraft.booking} isNew={bookingDraft.isNew} timeZone={snapshot.trip.timeZone} onClose={()=>setBookingDraft(null)} onSave={booking=>{update(current=>({...current,bookings:bookingDraft.isNew ? [...current.bookings,booking] : current.bookings.map(b=>b.id===booking.id?booking:b)}));setBookingDraft(null);}}/>}
+      {bookingDraft && <BookingEditor initial={bookingDraft.booking} isNew={bookingDraft.isNew} timeZone={snapshot.trip.timeZone} onClose={()=>setBookingDraft(null)} onSave={booking=>{if(update(current=>({...current,bookings:bookingDraft.isNew ? [...current.bookings,booking] : current.bookings.map(b=>b.id===booking.id?booking:b)})))setBookingDraft(null);}}/>}
       {journeysOpen&&<JourneysPanel legs={snapshot.travelLegs} onClose={()=>setJourneysOpen(false)} onEdit={leg=>setTravelDraft({leg,isNew:false})} onAdd={()=>setTravelDraft({isNew:true,leg:{id:crypto.randomUUID(),date,from:summary.cities[0]||"",to:"",mode:"train",durationMinutes:null,estimated:true}})}/>}
-      {travelDraft&&<TravelEditor initial={travelDraft.leg} isNew={travelDraft.isNew} onClose={()=>setTravelDraft(null)} onSave={leg=>{update(current=>({...current,travelLegs:travelDraft.isNew?[...current.travelLegs,leg]:current.travelLegs.map(l=>l.id===leg.id?leg:l)}));setTravelDraft(null);}} onRemove={travelDraft.isNew?undefined:()=>{update(current=>({...current,travelLegs:current.travelLegs.filter(l=>l.id!==travelDraft.leg.id)}));setTravelDraft(null);}}/>}
+      {travelDraft&&<TravelEditor initial={travelDraft.leg} isNew={travelDraft.isNew} onClose={()=>setTravelDraft(null)} onSave={leg=>{if(update(current=>({...current,travelLegs:travelDraft.isNew?[...current.travelLegs,leg]:current.travelLegs.map(l=>l.id===leg.id?leg:l)})))setTravelDraft(null);}} onRemove={travelDraft.isNew?undefined:()=>{if(update(current=>({...current,travelLegs:current.travelLegs.filter(l=>l.id!==travelDraft.leg.id)})))setTravelDraft(null);}}/>}
       {detailPlace&&<PlaceDetails place={detailPlace} scheduled={scheduledIds.has(detailPlace.id)} onClose={()=>setDetailPlace(null)} onAdd={()=>addToDay(detailPlace)}/>}
     </main>
   );

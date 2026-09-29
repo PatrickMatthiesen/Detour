@@ -1,6 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import { offlineAppShellPlugin } from "./vite/offline-plugin";
 
 const apiTarget =
   process.env.API_HTTP ||
@@ -30,7 +31,7 @@ const proxy = apiProxy
   : undefined;
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), offlineAppShellPlugin()],
   server: {
     port: 5173,
     proxy,

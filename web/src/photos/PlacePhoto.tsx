@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Camera } from "lucide-react";
 import type { Place } from "../types";
 import { photoFor } from "./place-photo";
+import "./place-photo.css";
 
 export default function PlacePhoto({ place, className = "" }: { place: Place; className?: string }) {
   const { photo, caption, showCaption, credit, sourceUrl } = photoFor(place);

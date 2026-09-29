@@ -1,6 +1,7 @@
 import type { TripSnapshot } from "./types";
 
 export type TripUpdater = (current: TripSnapshot) => TripSnapshot;
+export type TripMutate = (updater: TripUpdater) => boolean;
 
 type StoreListener = (snapshot: TripSnapshot, error: string) => void;
 
@@ -10,6 +11,10 @@ export class TripMutationQueue {
   private readonly pending: TripUpdater[] = [];
   private saving = false;
   private blocked = false;
+
+  get canEdit() {
+    return !this.blocked;
+  }
 
   constructor(
     initial: TripSnapshot,

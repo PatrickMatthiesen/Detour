@@ -1,15 +1,15 @@
 .packing-view {
-  --packing-ink: #273535;
-  --packing-muted: #687875;
-  --packing-line: #dfe4dc;
-  --packing-paper: #fbfaf6;
-  --packing-cream: #f5f1e8;
-  --packing-coral: #b94f3f;
-  --packing-coral-soft: #f6e2dc;
-  --packing-sage: #58765f;
-  --packing-sage-soft: #e4eee5;
+  --packing-ink: var(--color-ink);
+  --packing-muted: var(--color-muted);
+  --packing-line: var(--color-hairline);
+  --packing-paper: var(--color-paper);
+  --packing-cream: var(--color-canvas);
+  --packing-coral: var(--color-vermilion);
+  --packing-coral-soft: var(--color-vermilion-soft);
+  --packing-sage: var(--color-moss);
+  --packing-sage-soft: var(--color-moss-soft);
   color: var(--packing-ink);
-  font: 14px/1.45 Lato, Inter, ui-sans-serif, system-ui, sans-serif;
+  font: 14px/1.45 var(--font-sans);
   max-width: 820px;
 }
 
@@ -40,9 +40,9 @@
 .packing-count span { font-size: 12px; }
 
 .packing-add-button,
-.packing-empty-action { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--packing-coral); border-radius: 5px; background: var(--packing-coral); color: white; padding: 8px 12px; font-weight: 700; }
+.packing-empty-action { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--packing-coral); border-radius:var(--radius-sm); background: var(--packing-coral); color: white; padding: 8px 12px; font-weight: 700; }
 .packing-add-button:hover,
-.packing-empty-action:hover { background: #a94436; }
+.packing-empty-action:hover { background: var(--color-vermilion-ink); }
 
 .packing-filters { align-items: stretch; border-bottom: 1px solid var(--packing-line); margin-bottom: 16px; }
 .packing-filter-tabs { display: flex; gap: 3px; }
@@ -53,7 +53,7 @@
 .packing-filter-tabs button.is-active span { background: var(--packing-coral-soft); }
 
 .packing-bag-filter { display: flex; align-items: center; gap: 7px; color: var(--packing-muted); font-size: 12px; }
-.packing-bag-filter select { min-width: 125px; border: 1px solid var(--packing-line); border-radius: 5px; background: var(--packing-paper); color: var(--packing-ink); padding: 6px 8px; }
+.packing-bag-filter select { min-width: 125px; border: 1px solid var(--packing-line); border-radius:var(--radius-sm); background: var(--packing-paper); color: var(--packing-ink); padding: 6px 8px; }
 
 .packing-group + .packing-group { margin-top: 20px; }
 .packing-group-heading { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
@@ -65,7 +65,7 @@
 .packing-row { display: flex; align-items: center; gap: 10px; min-height: 52px; border-top: 1px solid var(--packing-line); padding: 8px 0; }
 .packing-row.is-packed .packing-item-copy strong { color: #89958e; text-decoration: line-through; }
 .packing-row.is-packed .packing-item-copy span { color: #9aa39d; }
-.packing-check { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 22px; height: 22px; border: 1px solid #b8c6bb; border-radius: 5px; background: transparent; color: white; padding: 0; }
+.packing-check { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 22px; height: 22px; border: 1px solid #b8c6bb; border-radius:var(--radius-sm); background: transparent; color: white; padding: 0; }
 .packing-check:hover { border-color: var(--packing-sage); }
 .packing-row.is-packed .packing-check { border-color: var(--packing-sage); background: var(--packing-sage); }
 .packing-item-copy { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
@@ -92,21 +92,21 @@
 .packing-editor-header,
 .packing-editor-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--packing-paper); padding: 15px 18px; }
 .packing-editor-header { position: sticky; top: 0; z-index: 1; border-bottom: 1px solid var(--packing-line); }
-.packing-editor-header h2 { margin: 0; font: 700 20px/1.2 Lato, Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: -.02em; }
+.packing-editor-header h2 { margin: 0; font: 700 20px/1.2 var(--font-sans), system-ui, sans-serif; letter-spacing: -.02em; }
 .packing-icon-button { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border: 0; border-radius: 4px; background: transparent; color: var(--packing-sage); padding: 0; }
 .packing-icon-button:hover { background: var(--packing-sage-soft); }
-.packing-editor-error { margin: 13px 18px 0; border-radius: 5px; background: var(--packing-coral-soft); color: #9b392d; padding: 10px 12px; font-size: 12px; }
+.packing-editor-error { margin: 13px 18px 0; border-radius:var(--radius-sm); background: var(--packing-coral-soft); color: var(--color-vermilion-ink); padding: 10px 12px; font-size: 12px; }
 .packing-editor-fields { display: flex; flex-direction: column; gap: 15px; padding: 18px; }
-.packing-editor-fields label { display: flex; flex-direction: column; gap: 6px; color: #354743; font-size: 13px; }
+.packing-editor-fields label { display: flex; flex-direction: column; gap: 6px; color: var(--color-ink); font-size: 13px; }
 .packing-editor-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(100px, .7fr); gap: 11px; }
 .packing-editor input:not([type="checkbox"]),
 .packing-editor select,
-.packing-editor textarea { width: 100%; min-width: 0; border: 1px solid #cbd5cd; border-radius: 5px; background: white; color: var(--packing-ink); padding: 8px 9px; }
+.packing-editor textarea { width: 100%; min-width: 0; border: 1px solid #cbd5cd; border-radius:var(--radius-sm); background: white; color: var(--packing-ink); padding: 8px 9px; }
 .packing-editor textarea { min-height: 74px; resize: vertical; line-height: 1.45; }
 .packing-editor input[aria-invalid="true"] { border-color: var(--packing-coral); }
 .packing-optional { color: var(--packing-muted); font-size: 11px; font-weight: 400; }
 .packing-editor-footer { position: sticky; bottom: 0; z-index: 1; border-top: 1px solid var(--packing-line); }
-.packing-editor-footer button { border: 1px solid #cbd5cd; border-radius: 5px; background: white; color: #354743; padding: 8px 12px; }
+.packing-editor-footer button { border: 1px solid #cbd5cd; border-radius:var(--radius-sm); background: white; color: var(--color-ink); padding: 8px 12px; }
 .packing-editor-footer .packing-primary { border-color: var(--packing-coral); background: var(--packing-coral); color: white; }
 
 @media (max-width: 560px) {

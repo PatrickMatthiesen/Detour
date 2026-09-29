@@ -1,17 +1,17 @@
 .trip-calendar, .trip-calendar-indicators {
-  --calendar-ink: var(--plan-ink, #273535);
-  --calendar-muted: var(--plan-muted, #687875);
-  --calendar-faint: var(--plan-faint, #8d9992);
-  --calendar-line: var(--plan-line, #dfe4dc);
-  --calendar-paper: var(--plan-paper, #fbfaf6);
-  --calendar-coral: var(--plan-coral, #b94f3f);
-  --calendar-coral-soft: var(--plan-coral-soft, #f6e2dc);
-  --calendar-sage: var(--plan-sage, #58765f);
-  --calendar-sage-soft: var(--plan-sage-soft, #e4eee5);
-  --calendar-blue: var(--plan-blue, #426b80);
-  --calendar-blue-soft: var(--plan-blue-soft, #e4edf0);
-  --calendar-gold: var(--plan-gold, #95702b);
-  --calendar-gold-soft: var(--plan-gold-soft, #f5edda);
+  --calendar-ink: var(--plan-ink, var(--color-ink));
+  --calendar-muted: var(--plan-muted, var(--color-muted));
+  --calendar-faint: var(--plan-faint, var(--color-faint));
+  --calendar-line: var(--plan-line, var(--color-hairline));
+  --calendar-paper: var(--plan-paper, var(--color-paper));
+  --calendar-coral: var(--plan-coral, var(--color-vermilion));
+  --calendar-coral-soft: var(--plan-coral-soft, var(--color-vermilion-soft));
+  --calendar-sage: var(--plan-sage, var(--color-moss));
+  --calendar-sage-soft: var(--plan-sage-soft, var(--color-moss-soft));
+  --calendar-blue: var(--plan-blue, var(--color-indigo));
+  --calendar-blue-soft: var(--plan-blue-soft, var(--color-indigo-soft));
+  --calendar-gold: var(--plan-gold, var(--color-gold));
+  --calendar-gold-soft: var(--plan-gold-soft, var(--color-gold-soft));
   color: var(--calendar-ink);
   min-width: 0;
 }
@@ -32,7 +32,7 @@
 }
 
 .trip-calendar-heading h2 {
-  font-family: Lato, Inter, ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-sans);
   font-size: 19px;
   font-weight: 700;
   letter-spacing: -.025em;
@@ -171,11 +171,11 @@
 }
 
 .trip-calendar-popover {
-  --calendar-ink: var(--plan-ink, #273535);
-  --calendar-muted: var(--plan-muted, #687875);
-  background: var(--calendar-paper, #fbfaf6);
-  border: 1px solid var(--calendar-line, #dfe4dc);
-  border-radius: 8px;
+  --calendar-ink: var(--plan-ink, var(--color-ink));
+  --calendar-muted: var(--plan-muted, var(--color-muted));
+  background: var(--calendar-paper, var(--color-paper));
+  border: 1px solid var(--calendar-line, var(--color-hairline));
+  border-radius:var(--radius-md);
   box-shadow: 0 12px 30px rgba(39, 53, 53, .16);
   color: var(--calendar-ink);
   inset: auto;
@@ -192,7 +192,7 @@
 .trip-calendar-popover::backdrop { background: transparent; }
 .trip-calendar-popover h3 { color: var(--calendar-ink); font-size: 14px; line-height: 1.3; margin: 0 0 7px; }
 .trip-calendar-popover ul { list-style: none; margin: 0; max-height: 220px; overflow-y: auto; padding: 0; }
-.trip-calendar-popover li { border-top: 1px solid var(--calendar-line, #dfe4dc); color: var(--calendar-muted); font-size: 13px; line-height: 1.5; padding: 6px 0 0; }
+.trip-calendar-popover li { border-top: 1px solid var(--calendar-line, var(--color-hairline)); color: var(--calendar-muted); font-size: 13px; line-height: 1.5; padding: 6px 0 0; }
 .trip-calendar-popover li + li { margin-top: 6px; }
 
 .trip-calendar-indicator b { font-size: 10px; font-variant-numeric: tabular-nums; }
@@ -203,7 +203,7 @@
 .trip-calendar-indicator--hotel.is-missing { background: var(--calendar-gold-soft); color: var(--calendar-gold); }
 .trip-calendar-indicator--hotel.is-outside { background: #eef0eb; color: var(--calendar-faint); }
 .trip-calendar-indicator--unknown { background: var(--calendar-gold-soft); color: var(--calendar-gold); }
-.trip-calendar-indicator--overlap { background: #f3dfd8; color: #a74738; }
+.trip-calendar-indicator--overlap { background: var(--color-vermilion-soft); color: var(--color-vermilion-ink); }
 
 .trip-calendar-indicators--dots .trip-calendar-indicator {
   background: transparent;
@@ -249,7 +249,7 @@
 .trip-calendar-label--hotel.is-missing { background: var(--calendar-gold-soft); color: var(--calendar-gold); }
 .trip-calendar-label--hotel.is-outside { background: #eef0eb; color: var(--calendar-faint); }
 .trip-calendar-label--unknown { background: var(--calendar-gold-soft); color: var(--calendar-gold); }
-.trip-calendar-label--overlap { background: #f3dfd8; color: #a74738; }
+.trip-calendar-label--overlap { background: var(--color-vermilion-soft); color: var(--color-vermilion-ink); }
 
 .trip-calendar-blank { border-bottom: 1px solid var(--calendar-line); border-right: 1px solid var(--calendar-line); }
 .trip-calendar-blank:nth-child(7n) { border-right: 0; }

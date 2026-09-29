@@ -1,7 +1,9 @@
+import { MutationButton } from "../trip-editing";
 import {useEffect,useRef,useState} from "react";
 import {X,Plus,Check,ExternalLink,Camera} from "lucide-react";
 import type {Place} from "../types";
-import {photoFor,PlacePhoto} from "../mockups/design-kit";
+import {photoFor} from "../photos/place-photo";
+import PlacePhoto from "../photos/PlacePhoto";
 import "./PlaceDetails.css";
 
 // Only lift explicitly labelled paragraphs; keep all other source prose intact.
@@ -88,10 +90,10 @@ export default function PlaceDetails({place,scheduled=false,onAdd,onEdit,onClose
   <header>
    <button type="button" className="place-details-back" aria-label="Back to places" onClick={onClose}><span aria-hidden="true">←</span> Back</button>
    <div className="place-details-header-actions">
-    {onEdit&&<button type="button" className="place-details-edit" aria-label="Edit place" onClick={onEdit}>Edit</button>}
-    {onToggleTrip&&<button type="button" className={`place-details-trip-toggle${place.selected ? " is-added" : ""}`} aria-pressed={!!place.selected} aria-label={place.selected ? "Remove from trip" : "Add to trip"} title={place.selected ? "Remove from trip" : "Choose this place without scheduling a day"} onClick={onToggleTrip}>
+    {onEdit&&<MutationButton type="button" className="place-details-edit" aria-label="Edit place" onClick={onEdit}>Edit</MutationButton>}
+    {onToggleTrip&&<MutationButton type="button" className={`place-details-trip-toggle${place.selected ? " is-added" : ""}`} aria-pressed={!!place.selected} aria-label={place.selected ? "Remove from trip" : "Add to trip"} title={place.selected ? "Remove from trip" : "Choose this place without scheduling a day"} onClick={onToggleTrip}>
      {place.selected ? <Check size={15}/> : <Plus size={15}/>} {place.selected ? "Added to trip" : "Add to trip"}
-    </button>}
+    </MutationButton>}
    </div>
   </header>
   <div className="place-details-body">
@@ -116,6 +118,6 @@ export default function PlaceDetails({place,scheduled=false,onAdd,onEdit,onClose
  return <dialog ref={dialog} className="place-details" onCancel={e=>{e.stopPropagation();onClose()}} aria-labelledby="place-details-title">
   <header><div><h2 id="place-details-title">{place.name}</h2><p className="place-details-location">{[place.city,place.area,place.category].filter(Boolean).join(" · ")}</p></div><button aria-label="Close place details" onClick={onClose}><X size={20}/></button></header>
   {content}
-  <footer><button onClick={onClose}>Close</button>{onEdit&&<button className="place-details-add" onClick={onEdit}>Edit place</button>}{onAdd&&<button className="place-details-add" disabled={scheduled} onClick={onAdd}>{scheduled?<Check size={16}/>:<Plus size={16}/>} {scheduled?"On this day":"Add to this day"}</button>}</footer>
+  <footer><button onClick={onClose}>Close</button>{onEdit&&<MutationButton className="place-details-add" onClick={onEdit}>Edit place</MutationButton>}{onAdd&&<MutationButton className="place-details-add" disabled={scheduled} onClick={onAdd}>{scheduled?<Check size={16}/>:<Plus size={16}/>} {scheduled?"On this day":"Add to this day"}</MutationButton>}</footer>
  </dialog>;
 }
