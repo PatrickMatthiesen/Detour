@@ -96,11 +96,29 @@ function routeArrowImage():ImageData {
 }
 export function DesignMap({places,selected,city,onCity,onPlace,focusedPlaceId,bottomInset=0,leftInset=0,className='',route=false,routeStops=noRouteStops,cityStatuses=noCityStatuses,palette,showInformation=true}:{places:Place[];selected:Set<string>;city?:string;onCity?:(city:string)=>void;onPlace?:(place:Place)=>void;focusedPlaceId?:string;bottomInset?:number;leftInset?:number;className?:string;route?:boolean;routeStops?:ReadonlyArray<{city:string}>;cityStatuses?:ReturnType<typeof summarizeCityStops>;showInformation?:boolean;palette?:'stone'|'sage'|'sand'|'original'|'journey'}){
  const originalPaint=useRef(new Map<string,unknown>());
+ const [locationError,setLocationError]=useState<string|null>(null);
  const host=useRef<HTMLDivElement>(null),map=useRef<maplibregl.Map|null>(null),[ready,setReady]=useState(false),[failed,setFailed]=useState(false);const callbacks=useRef({onCity,onPlace,places});callbacks.current={onCity,onPlace,places};
  const insets=useRef({leftInset,bottomInset});insets.current={leftInset,bottomInset};
  const focused=focusedPlaceId?places.find(p=>p.id===focusedPlaceId):undefined;
  useEffect(()=>{if(!host.current)return;const m=new maplibregl.Map({container:host.current,style:'https://tiles.openfreemap.org/styles/positron',center:[137.5,35.8],zoom:5.8,attributionControl:{compact:true},locale:{"NavigationControl.ResetBearing":"Reset rotation and tilt"}});map.current=m;let live=true;
  m.addControl(new maplibregl.NavigationControl({showCompass:true,visualizePitch:true}),'top-right');
+ const location=new maplibregl.GeolocateControl({
+  positionOptions:{enableHighAccuracy:true,timeout:15000,maximumAge:10000},
+  trackUserLocation:true,
+  showUserLocation:true,
+  showAccuracyCircle:true,
+  fitBoundsOptions:{maxZoom:15,get offset():[number,number]{return [insets.current.leftInset/2,-insets.current.bottomInset/2]}},
+ });
+ location.on('geolocate',()=>{if(live)setLocationError(null)});
+ location.on('error',(error:GeolocationPositionError)=>{if(!live)return;setLocationError(error.code===1
+  ?'Location access was denied. Allow location for this site in your browser settings, then reload this page.'
+  :error.code===3?'Finding your location timed out. Turn location tracking off and on to retry.'
+  :'Your location is unavailable. Check your device location settings, then turn location tracking off and on to retry.')});
+ if(!window.isSecureContext||!navigator.geolocation)setLocationError('Location requires HTTPS and a browser with location support.');
+ else if(navigator.permissions)void navigator.permissions.query({name:'geolocation'}).then(permission=>{
+  if(live&&permission.state==='denied')setLocationError('Location access was denied. Allow location for this site in your browser settings, then reload this page.');
+ }).catch(()=>{/* Some browsers do not support querying location permission. */});
+ m.addControl(location,'top-right');
  m.on('load',()=>{if(!live)return; for(const id of ['areas','points','route'])m.addSource('dk-'+id,{type:'geojson',data:empty});
  m.addLayer({id:'dk-area-fill',type:'fill',source:'dk-areas',paint:{'fill-color':['get','statusColor'],'fill-opacity':['case',['get','active'],0.10,0.03]}});
  m.addLayer({id:'dk-area-edge',type:'line',source:'dk-areas',paint:{'line-color':['get','statusColor'],'line-width':1.5,'line-dasharray':[3,3]}});
@@ -152,5 +170,5 @@ export function DesignMap({places,selected,city,onCity,onPlace,focusedPlaceId,bo
  },[ready,palette]);
  const unresolvedCities=unresolvedRouteCities(routeStops,places);
  const shown=places.filter(p=>!city||p.city===city),unknown=shown.filter(p=>p.latitude==null||p.longitude==null).length;
- return <div className={'dk-map '+className}><div ref={host} className="dk-map-canvas"/>{!!unresolvedCities.length&&<p className="dk-route-warning" role="status">Route incomplete: cannot locate {unresolvedCities.join(", ")}. Edit these stays to use one mapped city or city area.</p>}{failed&&!ready&&<div className="dk-map-error">Map unavailable. You can still browse and select places.</div>}{showInformation&&<details className="dk-map-key"><summary><span className="dk-key-dot"/>Map information</summary><p>Dashed shapes are illustrative planning areas, not city boundaries. Their geographic size stays fixed as you zoom.</p><p>{unknown} places in this view still need exact coordinates. City counts include them.</p>{(route||routeStops.length>1)&&<p>Arrows show planned city order. Curves are illustrative, not transport paths.</p>}</details>}{!showInformation&&<details className="dk-map-key dk-status-key"><summary>Map key</summary><ul>{([['saved','Saved idea'],['picked','Picked / not booked'],['partial','Partly booked'],['booked','Booked']] as const).map(([status,label])=><li key={status}><span style={{background:STATUS_COLORS[status]}} aria-hidden="true"/>{label}</li>)}</ul><p>City booking status covers accommodation across all stays.</p><p>Blue arrows show city order, not transport paths.</p></details>}</div>
+ return <div className={'dk-map '+className}><div ref={host} className="dk-map-canvas"/>{locationError&&<p className="dk-location-error" role="status">{locationError}</p>}{!!unresolvedCities.length&&<p className="dk-route-warning" role="status">Route incomplete: cannot locate {unresolvedCities.join(", ")}. Edit these stays to use one mapped city or city area.</p>}{failed&&!ready&&<div className="dk-map-error">Map unavailable. You can still browse and select places.</div>}{showInformation&&<details className="dk-map-key"><summary><span className="dk-key-dot"/>Map information</summary><p>Dashed shapes are illustrative planning areas, not city boundaries. Their geographic size stays fixed as you zoom.</p><p>{unknown} places in this view still need exact coordinates. City counts include them.</p>{(route||routeStops.length>1)&&<p>Arrows show planned city order. Curves are illustrative, not transport paths.</p>}</details>}{!showInformation&&<details className="dk-map-key dk-status-key"><summary>Map key</summary><ul>{([['saved','Saved idea'],['picked','Picked / not booked'],['partial','Partly booked'],['booked','Booked']] as const).map(([status,label])=><li key={status}><span style={{background:STATUS_COLORS[status]}} aria-hidden="true"/>{label}</li>)}</ul><p>City booking status covers accommodation across all stays.</p><p>Blue arrows show city order, not transport paths.</p></details>}</div>
 }

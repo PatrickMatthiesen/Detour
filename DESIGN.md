@@ -23,6 +23,8 @@ Desktop opens with a compact top navigation bar naming the active trip and the t
 
 Selecting one place wakes its city and area: the place row receives a vermilion marker, the area summary becomes colored, nearby saved places rise in the list, and the map shows the cluster. This is a planning signal, not an itinerary mutation.
 
+The location button sits beside the map navigation controls. It requests browser location permission only when clicked, then shows a blue position dot and an accuracy circle. The map follows location updates until the user moves the camera; the dot continues updating, and clicking the button recenters the map. Turning tracking off or leaving the map stops location updates. Location coordinates remain in the browser and are not saved to the trip. Permission and location failures show recovery instructions. Geolocation requires HTTPS or localhost and a browser with location support.
+
 ## States
 
 Saved places are paper rows, selected places carry a vermilion check and label, suggested places use a dashed indigo cue, and approximate city markers use a ring plus “city area” text. Empty and loading states explain recovery and never look like missing content.
