@@ -60,7 +60,15 @@ Set these values as secrets or deployment configuration. Environment variable na
 }
 ```
 
-`Auth:PublicUrl` is the canonical HTTPS issuer and must match the externally visible API origin. For the supplied deployment it is `https://detour.patrickbm.com`, making the MCP resource `https://detour.patrickbm.com/mcp`. The supplied deployment publishes HTTP on host port 48327 for Cloudflare Tunnel running on another VM. It enables forwarded headers and assumes a trusted local network, with access managed by the firewall. Deployments requiring a proxy allowlist can configure `Auth:TrustedProxies` and disable `ASPNETCORE_FORWARDEDHEADERS_ENABLED`.
+`Auth:PublicUrl` is the canonical HTTPS issuer and must match the externally visible API origin. For the supplied deployment it is `https://detour.patrickbm.com`, making the MCP resource `https://detour.patrickbm.com/mcp`. The API publishes HTTP on host port 48327 behind nginx on `192.168.1.151`, which receives Cloudflare Tunnel traffic and resets the forwarded client IP and scheme headers. The AppHost trusts only that proxy for `X-Forwarded-For` and `X-Forwarded-Proto`, with a one-hop limit. The API ignores forwarded host headers and does not enable forwarded-header processing when `Auth:TrustedProxies` is empty. Other deployments must set `Auth:TrustedProxies` to the exact address the application sees for its trusted proxy.
+
+## Request protection
+
+The production MCP endpoint accepts scoped OAuth bearer tokens only. Browser identity cookies remain valid for `/api` routes, whose mutations require an antiforgery token.
+
+OAuth endpoints share a process-wide token bucket with a burst of 600 requests and 600 tokens replenished each minute. It runs before authentication so rejected token attempts also count. Trip, place and MCP requests share a bucket per authenticated owner with a burst of 120 and 240 tokens replenished each minute. Trip replacements, photo uploads and MCP POST requests allow two concurrent expensive requests per owner with no queue. MCP event-stream GET requests do not occupy those concurrency permits. Rejections return HTTP 429 without an authentication challenge. These defaults require no deployment secrets or variables; self-hosters can override the `ApiRateLimits` configuration section.
+
+Production responses include a Content Security Policy restricted to the app, OpenFreeMap assets and Google Fonts, with blob workers and inline styles for MapLibre. They deny framing and content-type sniffing and send a strict-origin referrer policy. HTTPS responses include one-year HSTS for the current host, without `includeSubDomains` or preload.
 
 ## Automatic OAuth keys
 
@@ -73,6 +81,8 @@ The key directory is private (0700 on Linux) and key files are owner-only (0600)
 This file-backed manager supports one API process per key directory and holds an exclusive ownership lock. Multiple replicas need coordinated key storage/rotation and are not supported by this deployment. The API container user must have write access to the persistent directory. Development continues using OpenIddict's development credentials.
 
 The application registers the ChatGPT public client only when both `Auth:OAuth:ClientId` and at least one absolute `Auth:OAuth:RedirectUris` value are supplied. It logs a setup warning and does not pretend the integration is configured when either is missing. For the connector settings above, set environment variables `Auth__OAuth__ClientId=detour-chatgpt` and `Auth__OAuth__RedirectUris__0=https://chatgpt.com/connector_platform_oauth_redirect` (replace the callback with the exact value copied from ChatGPT). Redirect URIs must exactly match the client settings in the ChatGPT connector. If ChatGPT reports `invalid_target`, check that the MCP URL and the resource metadata use the complete `/mcp` URL and that `tripadvisor_api` is configured as the scope.
+
+If ChatGPT repeatedly asks to reconnect while OpenIddict still has a valid refresh token and Detour receives no refresh request, inspect Cloudflare Security Events for blocked `POST /connect/token` requests before revoking tokens or changing OAuth settings. On October 6, 2026, a country rule blocked a ChatGPT connector request from `172.172.206.62` because the configured egress exception did not include that address. On October 9, 2026, the zone-wide country block and its two OpenAI connector exceptions were removed to support travel and avoid dependence on changing connector IP ranges. Cloudflare managed protection and application authentication remain in place. If a country restriction is introduced again, keep any required exception scoped to its intended hostname and rule bypass, and synchronize it with [OpenAI's published connector ranges](https://openai.com/chatgpt-connectors.json).
 
 ## Database startup
 

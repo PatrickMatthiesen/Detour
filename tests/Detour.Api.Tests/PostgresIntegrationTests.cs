@@ -321,6 +321,35 @@ public sealed class PostgresIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Authorization_server_metadata_advertises_public_client_authentication()
+    {
+        if (!HasDatabase()) return;
+        var previousConnection = Environment.GetEnvironmentVariable("ConnectionStrings__tripdb");
+        var previousPublicUrl = Environment.GetEnvironmentVariable("Auth__PublicUrl");
+        var previousClientId = Environment.GetEnvironmentVariable("Auth__OAuth__ClientId");
+        var previousRedirect = Environment.GetEnvironmentVariable("Auth__OAuth__RedirectUris__0");
+        Environment.SetEnvironmentVariable("ConnectionStrings__tripdb", connection);
+        Environment.SetEnvironmentVariable("Auth__PublicUrl", "https://detour.example.test");
+        Environment.SetEnvironmentVariable("Auth__OAuth__ClientId", "detour-chatgpt");
+        Environment.SetEnvironmentVariable("Auth__OAuth__RedirectUris__0", "https://chatgpt.com/connector_platform_oauth_redirect");
+        try
+        {
+            using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.UseEnvironment("Development"));
+            using var response = await factory.CreateClient().GetAsync("/.well-known/openid-configuration");
+            response.EnsureSuccessStatusCode();
+            var metadata = JsonSerializer.Deserialize<JsonElement>(await response.Content.ReadAsStringAsync(), JsonOptions);
+            Assert.Contains("none", metadata.GetProperty("token_endpoint_auth_methods_supported").EnumerateArray().Select(value => value.GetString()));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("ConnectionStrings__tripdb", previousConnection);
+            Environment.SetEnvironmentVariable("Auth__PublicUrl", previousPublicUrl);
+            Environment.SetEnvironmentVariable("Auth__OAuth__ClientId", previousClientId);
+            Environment.SetEnvironmentVariable("Auth__OAuth__RedirectUris__0", previousRedirect);
+        }
+    }
+
+    [Fact]
     public async Task OAuth_initializer_reconciles_an_existing_scope_to_the_canonical_resource()
     {
         if (!HasDatabase()) return;
@@ -502,6 +531,58 @@ public sealed class PostgresIntegrationTests : IAsyncLifetime
         {
             Environment.SetEnvironmentVariable("ConnectionStrings__tripdb", previousConnection);
             Environment.SetEnvironmentVariable("Auth__AllowLocalDev", previousLocal);
+        }
+    }
+
+    [Fact]
+    public async Task Browser_cookie_can_access_trip_api_but_cannot_authorize_mcp()
+    {
+        if (!HasDatabase()) return;
+        var previousConnection = Environment.GetEnvironmentVariable("ConnectionStrings__tripdb");
+        var previousLocal = Environment.GetEnvironmentVariable("Auth__AllowLocalDev");
+        var previousClientId = Environment.GetEnvironmentVariable("Auth__Google__ClientId");
+        var previousClientSecret = Environment.GetEnvironmentVariable("Auth__Google__ClientSecret");
+        var previousAllowed = Environment.GetEnvironmentVariable("Auth__AllowedEmails__0");
+        Environment.SetEnvironmentVariable("ConnectionStrings__tripdb", connection);
+        Environment.SetEnvironmentVariable("Auth__AllowLocalDev", "false");
+        Environment.SetEnvironmentVariable("Auth__Google__ClientId", "cookie-mcp-test-client");
+        Environment.SetEnvironmentVariable("Auth__Google__ClientSecret", "cookie-mcp-test-secret");
+        Environment.SetEnvironmentVariable("Auth__AllowedEmails__0", "cookie-owner@example.test");
+        try
+        {
+            using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+            {
+                builder.UseEnvironment("Development");
+                builder.ConfigureTestServices(services => services.PostConfigure<GoogleOptions>(
+                    GoogleDefaults.AuthenticationScheme, options =>
+                    {
+                        options.AuthorizationEndpoint = "https://accounts.google.test/o/oauth2/v2/auth";
+                        options.TokenEndpoint = "https://oauth2.google.test/token";
+                        options.UserInformationEndpoint = "https://oauth2.google.test/userinfo";
+                        options.Backchannel = new HttpClient(new GoogleBackchannelHandler("cookie-owner@example.test", true));
+                    }));
+            });
+            using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new Uri("https://localhost"), AllowAutoRedirect = false });
+
+            await CompleteGoogleLoginAsync(client, "/");
+            using var trip = await client.GetAsync("/api/trip");
+            Assert.Equal(HttpStatusCode.OK, trip.StatusCode);
+
+            using var mcpRequest = new HttpRequestMessage(HttpMethod.Post, "/mcp")
+            {
+                Content = new StringContent("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}", Encoding.UTF8, "application/json")
+            };
+            using var mcp = await client.SendAsync(mcpRequest);
+            Assert.Equal(HttpStatusCode.Unauthorized, mcp.StatusCode);
+            Assert.Contains("Bearer", mcp.Headers.WwwAuthenticate.Select(challenge => challenge.Scheme));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("ConnectionStrings__tripdb", previousConnection);
+            Environment.SetEnvironmentVariable("Auth__AllowLocalDev", previousLocal);
+            Environment.SetEnvironmentVariable("Auth__Google__ClientId", previousClientId);
+            Environment.SetEnvironmentVariable("Auth__Google__ClientSecret", previousClientSecret);
+            Environment.SetEnvironmentVariable("Auth__AllowedEmails__0", previousAllowed);
         }
     }
 

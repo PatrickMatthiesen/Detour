@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using ModelContextProtocol.Server;
@@ -32,6 +33,7 @@ builder.Services.AddScoped<PhotoImportService>();
 builder.Services.AddHostedService<PhotoCleanupWorker>();
 builder.Services.AddAntiforgery(options => options.HeaderName = "X-CSRF-TOKEN");
 builder.Services.Configure<FormOptions>(options => options.MultipartBodyLengthLimit = PhotoDownloader.MaxDownloadBytes + 1024 * 1024);
+ApiRateLimits.Add(builder.Services, builder.Configuration);
 
 builder.Services.AddHttpClient("photo-import", client =>
 {
@@ -82,12 +84,7 @@ var trustedProxyAddresses = builder.Configuration.GetSection("Auth:TrustedProxie
 if (trustedProxyAddresses.Length > 0)
 {
     builder.Services.Configure<ForwardedHeadersOptions>(options =>
-    {
-        options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost;
-        options.ForwardLimit = 1;
-        foreach (var address in trustedProxyAddresses)
-            if (System.Net.IPAddress.TryParse(address, out var ip)) options.KnownProxies.Add(ip);
-    });
+        ForwardedProxyConfiguration.Configure(options, trustedProxyAddresses));
 }
 
 builder.Services.AddIdentityCore<ApplicationUser>(options =>
@@ -124,6 +121,7 @@ builder.Services.AddOpenIddict()
         options.SetAuthorizationEndpointUris("/connect/authorize").SetTokenEndpointUris("/connect/token");
         options.AllowAuthorizationCodeFlow().AllowRefreshTokenFlow().RequireProofKeyForCodeExchange();
         options.AcceptAnonymousClients();
+        options.Configure(serverOptions => serverOptions.ClientAuthenticationMethods.Add("none"));
         options.RegisterScopes(OpenIddictConstants.Scopes.OpenId, OpenIddictConstants.Scopes.Profile, OpenIddictConstants.Scopes.Email, OpenIddictConstants.Scopes.OfflineAccess, oauthScope);
         options.RegisterResources(oauthResource);
         options.SetAccessTokenLifetime(TimeSpan.FromHours(1));
@@ -159,16 +157,24 @@ builder.Services.AddAuthorization(options =>
             context.User.FindAll(OpenIddictConstants.Claims.Scope)
                 .SelectMany(claim => claim.Value.Split(' ', StringSplitOptions.RemoveEmptyEntries))
                 .Contains(oauthScope, StringComparer.Ordinal)));
+    options.AddPolicy("mcp-bearer", policy => policy
+        .AddAuthenticationSchemes(OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme)
+        .RequireAuthenticatedUser()
+        .RequireAssertion(context => context.User.FindAll(OpenIddictConstants.Claims.Scope)
+            .SelectMany(claim => claim.Value.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+            .Contains(oauthScope, StringComparer.Ordinal)));
 });
 
 builder.Services.AddMcpServer(options => options.ServerInstructions = TripMcpTools.PhotoInstructions)
     .WithHttpTransport(options => options.Stateless = false).WithTools<TripMcpTools>();
 builder.Services.AddScoped<OpenIddictInitializer>();
 var app = builder.Build();
-app.UseDefaultFiles();
-app.UseStaticFiles();
 if (trustedProxyAddresses.Length > 0)
     app.UseForwardedHeaders();
+app.UseSecurityHeaders();
+app.UseDefaultFiles();
+app.UseStaticFiles();
+app.UseWhen(ApiRateLimits.IsOAuthRequest, branch => branch.UseRateLimiter());
 using (var initializationScope = app.Services.CreateScope())
 {
     var db = initializationScope.ServiceProvider.GetRequiredService<TripDbContext>();
@@ -217,6 +223,7 @@ if (app.Environment.IsDevelopment() && !string.IsNullOrWhiteSpace(seedPath))
 }
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseWhen(context => !ApiRateLimits.IsOAuthRequest(context), branch => branch.UseRateLimiter());
 // Validate cookie-authenticated mutations explicitly for compatibility with
 // the .NET 10 preview's minimal endpoint metadata surface.
 app.Use(async (context, next) =>
@@ -270,6 +277,8 @@ var uploadPhoto = app.MapPost("/api/places/{placeId}/photo/upload", async (strin
 var removePhoto = app.MapDelete("/api/places/{placeId}/photo", async (string placeId, [FromBody] RemovePhotoRequest request, PlacePhotoService photos, CancellationToken ct) => PhotoResult(await photos.RemoveAsync(placeId, request.ExpectedVersion, ct)));
 if (secured) { getTrip.RequireAuthorization("trip-data"); putTrip.RequireAuthorization("trip-data"); }
 if (secured) { getPhoto.RequireAuthorization("trip-data"); uploadPhoto.RequireAuthorization("trip-data"); removePhoto.RequireAuthorization("trip-data"); }
+putTrip.RequireRateLimiting(ApiRateLimits.OwnerConcurrencyPolicy);
+uploadPhoto.RequireRateLimiting(ApiRateLimits.OwnerConcurrencyPolicy);
 app.MapGet("/.well-known/oauth-protected-resource", () =>
 {
     var resource = oauthResource;
@@ -284,7 +293,7 @@ app.MapGet("/auth/login", (HttpRequest request, SignInManager<ApplicationUser> s
     var properties = signInManager.ConfigureExternalAuthenticationProperties(
         GoogleDefaults.AuthenticationScheme, $"/auth/callback?returnUrl={Uri.EscapeDataString(returnUrl)}");
     return Results.Challenge(properties, [GoogleDefaults.AuthenticationScheme]);
-});
+}).RequireRateLimiting(ApiRateLimits.OAuthRequestPolicy);
 app.MapGet("/auth/callback", async (HttpContext context, SignInManager<ApplicationUser> signInManager, UserManager<ApplicationUser> userManager, HttpRequest request) =>
 {
     var info = await signInManager.GetExternalLoginInfoAsync();
@@ -308,7 +317,7 @@ app.MapGet("/auth/callback", async (HttpContext context, SignInManager<Applicati
         await userManager.AddLoginAsync(user, info);
     await signInManager.SignInAsync(user, isPersistent: true);
     return Results.LocalRedirect(SafeReturnUrl(request.Query["returnUrl"].ToString()) ?? "/");
-});
+}).RequireRateLimiting(ApiRateLimits.OAuthRequestPolicy);
 app.MapGet("/auth/me", (ClaimsPrincipal user) => Results.Ok(new
 {
     authenticated = user.Identity?.IsAuthenticated == true,
@@ -347,15 +356,16 @@ app.MapGet("/connect/authorize", async (HttpContext context, UserManager<Applica
     foreach (var claim in identity.Claims)
         claim.SetDestinations(OpenIddictConstants.Destinations.AccessToken, OpenIddictConstants.Destinations.IdentityToken);
     return Results.SignIn(new ClaimsPrincipal(identity), properties: null, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
-});
+}).RequireRateLimiting(ApiRateLimits.OAuthRequestPolicy);
 app.MapPost("/connect/token", async (HttpContext context) =>
 {
     var result = await context.AuthenticateAsync(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
     if (!result.Succeeded || result.Principal is null) return Results.BadRequest(new { error = "invalid_grant" });
     return Results.SignIn(result.Principal, properties: null, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
-});
+}).RequireRateLimiting(ApiRateLimits.OAuthRequestPolicy);
 var mcp = app.MapMcp("/mcp");
-if (secured) mcp.RequireAuthorization("trip-data");
+if (secured) mcp.RequireAuthorization("mcp-bearer");
+mcp.RequireRateLimiting(ApiRateLimits.OwnerConcurrencyPolicy);
 // Known React routes only: missing API/auth/MCP endpoints must remain 404s.
 foreach (var route in new[] { "/", "/plan", "/itinerary", "/preparation", "/{preview:int}" })
     app.MapFallbackToFile(route, "index.html");
