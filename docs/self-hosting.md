@@ -2,7 +2,7 @@
 
 Development runs Vite, the API, and PostgreSQL through Aspire. Production uses `api.PublishWithContainerFiles(web, "/app/wwwroot")`: the API container serves the built React app as well as API, login, and MCP endpoints. There is no separate frontend gateway or Compose override.
 
-Traffic: browser/ChatGPT → Cloudflare HTTPS → cloudflared on the proxy VM → Docker VM port `48327` → Detour API → PostgreSQL. Docker publishes `48327:8080` on all host interfaces. The API accepts forwarded HTTPS headers from the trusted local network; network access is managed by the firewall. The database has no published host port, and the production Aspire dashboard is disabled.
+Traffic: browser/ChatGPT → Cloudflare HTTPS → cloudflared → nginx on `192.168.1.151` → Docker VM port `48327` → Detour API → PostgreSQL. Docker publishes `48327:8080` on all host interfaces. Nginx resets the forwarded client IP and scheme headers, and the API trusts only this proxy address for those headers. Restrict access to the published host port to the proxy and required local health checks at the host firewall; the proxy allowlist controls header trust, not network access. The database has no published host port, and the production Aspire dashboard is disabled.
 
 ## GitHub Actions
 

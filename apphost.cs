@@ -65,8 +65,8 @@ if (builder.ExecutionContext.IsPublishMode)
             endpoint.TargetPort = 8080;
         })
         .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Production")
-        // Cloudflared runs on another VM on the trusted local network.
-        .WithEnvironment("ASPNETCORE_FORWARDEDHEADERS_ENABLED", "true")
+        // Nginx on the trusted LAN host resets forwarded headers before they reach the API.
+        .WithEnvironment("Auth__TrustedProxies__0", "192.168.1.151")
         .WithEnvironment("Auth__AllowLocalDev", "false")
         .WithEnvironment("Auth__PublicUrl", publicUrl)
         .WithEnvironment("AllowedHosts", new Uri(publicUrl).Host)
