@@ -18,6 +18,7 @@ import { photoFor } from "../photos/place-photo";
 import PlacePhoto from "../photos/PlacePhoto";
 import { daySummary, datesForTrip, isCheckoutDay } from "./planning";
 import type { Activity, Booking, Place, TravelLeg, TripSnapshot } from "../types";
+import { defaultPlanDate, useTripToday } from "./current-day";
 import TripCalendar, { DayIndicators } from "./TripCalendar";
 import "./plan.css";
 import StayEditor from "./StayEditor";
@@ -153,10 +154,10 @@ function ActivityRow({
 
 export default function PlanPage({ snapshot, update }: PlanPageProps) {
   const dates = useMemo(() => datesForTrip(snapshot), [snapshot]);
-  const arrivalDate = snapshot.trip.arrival?.date?.slice(0, 10) || snapshot.trip.arrival?.localDateTime?.slice(0, 10);
-  const firstStayDate = snapshot.stays[0]?.checkIn?.slice(0, 10);
-  const preferredDate = arrivalDate || firstStayDate || dates[0] || "";
+  const today = useTripToday(snapshot.trip.timeZone);
+  const preferredDate = defaultPlanDate(snapshot, today);
   const [focusedDate, setFocusedDate] = useState(preferredDate);
+  useEffect(() => { setFocusedDate(preferredDate); }, [today, snapshot.trip.id]);
   const [journeysOpen,setJourneysOpen] = useState(false);
   const [travelDraft,setTravelDraft] = useState<{leg:TravelLeg,isNew:boolean}|null>(null);
   const [detailPlace,setDetailPlace] = useState<Place|null>(null);
@@ -278,6 +279,7 @@ export default function PlanPage({ snapshot, update }: PlanPageProps) {
           ))}
         </div>
         <button type="button" className="plan-icon-button" onClick={() => shiftDate(1)} disabled={index === dates.length - 1 || !dates.length} aria-label="Next day"><ChevronRight size={18} /></button>
+        <button type="button" className="plan-calendar-switch" disabled={!dates.includes(today)} onClick={()=>{setFocusedDate(today);setCalendarOpen(false)}}>Today</button>
         <button type="button" className="plan-calendar-switch" onClick={()=>setCalendarOpen(true)} aria-label="Whole trip" title="Whole trip calendar"><CalendarDays size={18}/><span>Whole trip</span></button>
       </section>
 

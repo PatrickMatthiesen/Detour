@@ -20,6 +20,7 @@ import PlaceDetails from "../plan/PlaceDetails";
 import { usePlacesDrawer } from "./use-places-drawer";
 import { useRecentCities } from "./recent-cities";
 import { buildRouteStops, summarizeCityStops, STATUS_COLORS } from "./route-status";
+import { defaultCity, useTripToday } from "../plan/current-day";
 import { MutationButton } from "../trip-editing";
 import "./places-explorer.css";
 import "./places-drawer.css";
@@ -61,7 +62,8 @@ function TransportBookings({trip}:{trip:TripSnapshot|null}) {
 export function PlacesExplorer({trip, selected, toggle, loading, error, header, onAdd, onEdit, renderEdit}: {trip:TripSnapshot|null;selected:Set<string>;toggle:(id:string)=>void;loading:boolean;error:string;header?:ReactNode;onAdd?:()=>void;onEdit?:(place:Place)=>void;renderEdit?:(place:Place,onClose:()=>void)=>ReactNode}) {
   const search = useSearch({ strict: false });
   const navigate = useNavigate();
-  const city = search.city ?? "Tokyo";
+  const today = useTripToday(trip?.trip.timeZone);
+  const city = search.city ?? (trip ? defaultCity(trip, today) : "All cities");
   const recentCities = useRecentCities(trip?.trip.id ?? "preview", city);
   const category = search.category ?? "All";
   const selectedOnly = search.chosen === true;
