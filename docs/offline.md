@@ -20,4 +20,4 @@ Offline mode shows a disconnected icon and disables changes. The download icon c
 
 Storage failures appear in the app and do not prevent online editing. Clearing browser data or browser storage eviction removes the offline copy. An unsuccessful edit is never persisted as confirmed trip data.
 
-Application updates activate after tabs using the old worker close. The service worker caches only application files, never authentication or API responses.
+Application updates activate after tabs using the old worker close. Supported page navigations use the server response while online, so current response headers reach the browser. If the network request fails, the worker serves its cached app shell with the matching cached assets. The service worker caches only application files, never authentication or API responses.
