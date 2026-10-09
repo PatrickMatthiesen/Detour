@@ -58,7 +58,7 @@ function makeWorker(fetchImpl: typeof fetch = vi.fn()) {
 }
 
 describe("offline app shell worker", () => {
-  it("pre-caches the shell and serves its matching HTML for supported routes", async () => {
+  it("pre-caches the shell and falls back to its HTML for supported routes offline", async () => {
     const fetchOffline = vi.fn(async () => { throw new TypeError("offline"); });
     const worker = makeWorker(fetchOffline);
     await worker.dispatch("install", {});
@@ -71,7 +71,35 @@ describe("offline app shell worker", () => {
     });
     expect(response).toBeInstanceOf(Response);
     expect(await (response as Response).text()).toBe("shell");
-    expect(fetchOffline).not.toHaveBeenCalled();
+    expect(fetchOffline).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses the network response and its security headers for supported routes online", async () => {
+    let online = true;
+    const fetchOnline = vi.fn(async () => {
+      if (!online) throw new TypeError("offline");
+      return new Response("fresh shell", {
+        headers: { "Content-Security-Policy": "default-src 'self'" },
+      });
+    });
+    const worker = makeWorker(fetchOnline);
+    await worker.dispatch("install", {});
+
+    const navigationRequest = { url: "https://detour.test/plan", method: "GET", mode: "navigate" };
+    const response = await worker.dispatch("fetch", {
+      request: navigationRequest,
+    });
+
+    expect(fetchOnline).toHaveBeenCalledWith(navigationRequest, { cache: "no-cache" });
+    expect((response as Response).headers.get("Content-Security-Policy")).toBe("default-src 'self'");
+    expect(await (response as Response).text()).toBe("fresh shell");
+    expect(await worker.stores.get("detour-app-shell-test")!.get("https://detour.test/index.html")?.response.clone().text()).toBe("shell");
+
+    online = false;
+    const offlineResponse = await worker.dispatch("fetch", {
+      request: navigationRequest,
+    });
+    expect(await (offlineResponse as Response).text()).toBe("shell");
   });
 
   it("serves pre-cached module assets when the browser adds Origin to a Vary: Origin request", async () => {

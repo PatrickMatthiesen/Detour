@@ -45,7 +45,11 @@ self.addEventListener("fetch", (event) => {
     if (!APP_ROUTES.has(url.pathname)) return;
     event.respondWith((async () => {
       const cache = await caches.open(CACHE_NAME);
-      return await cache.match(new Request(new URL("/index.html", self.location.origin))) || fetch(request);
+      try {
+        return await fetch(request, { cache: "no-cache" });
+      } catch {
+        return await cache.match(new Request(new URL("/index.html", self.location.origin))) || Response.error();
+      }
     })());
     return;
   }
