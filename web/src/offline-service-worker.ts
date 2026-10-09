@@ -46,7 +46,7 @@ self.addEventListener("fetch", (event) => {
     event.respondWith((async () => {
       const cache = await caches.open(CACHE_NAME);
       try {
-        return await fetch(request);
+        return await fetch(request, { cache: "no-cache" });
       } catch {
         return await cache.match(new Request(new URL("/index.html", self.location.origin))) || Response.error();
       }

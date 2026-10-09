@@ -85,18 +85,19 @@ describe("offline app shell worker", () => {
     const worker = makeWorker(fetchOnline);
     await worker.dispatch("install", {});
 
+    const navigationRequest = { url: "https://detour.test/plan", method: "GET", mode: "navigate" };
     const response = await worker.dispatch("fetch", {
-      request: { url: "https://detour.test/plan", method: "GET", mode: "navigate" },
+      request: navigationRequest,
     });
 
-    expect(fetchOnline).toHaveBeenCalledTimes(1);
+    expect(fetchOnline).toHaveBeenCalledWith(navigationRequest, { cache: "no-cache" });
     expect((response as Response).headers.get("Content-Security-Policy")).toBe("default-src 'self'");
     expect(await (response as Response).text()).toBe("fresh shell");
     expect(await worker.stores.get("detour-app-shell-test")!.get("https://detour.test/index.html")?.response.clone().text()).toBe("shell");
 
     online = false;
     const offlineResponse = await worker.dispatch("fetch", {
-      request: { url: "https://detour.test/plan", method: "GET", mode: "navigate" },
+      request: navigationRequest,
     });
     expect(await (offlineResponse as Response).text()).toBe("shell");
   });
