@@ -198,6 +198,57 @@ public sealed class GoogleCalendarSyncTests
     }
 
     [Theory]
+    [InlineData(true, true)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(false, false)]
+    public async Task Missing_credentials_preserve_pending_sync_and_resume_after_configuration_returns(bool missingClientId, bool queued)
+    {
+        var google = new FakeGoogleCalendarClient();
+        await using var provider = CreateCalendarServiceProvider(Guid.NewGuid().ToString(),
+            new EphemeralDataProtectionProvider(), google).BuildServiceProvider();
+        await SeedCalendarTripAsync(provider, "owner-1");
+        await using (var scope = provider.CreateAsyncScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<DetourCalendarService>().CompleteAuthorizationAsync(
+                "owner-1", "google-subject-1", "refresh", "access", DetourCalendarOptions.Scope);
+            var db = scope.ServiceProvider.GetRequiredService<TripDbContext>();
+            var row = await db.GoogleCalendarConnections.SingleAsync();
+            if (!queued) row.SyncRequestedAt = null;
+            await db.SaveChangesAsync();
+        }
+        var before = await GetCalendarConnectionAsync(provider);
+        var options = provider.GetRequiredService<DetourCalendarOptions>();
+        if (missingClientId) options.ClientId = null;
+        else options.ClientSecret = null;
+        await using (var scope = provider.CreateAsyncScope())
+            await scope.ServiceProvider.GetRequiredService<DetourCalendarService>().SyncOwnerAsync("owner-1");
+        var worker = new GoogleCalendarSyncWorker(provider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<GoogleCalendarSyncWorker>.Instance);
+        await worker.RunOnceAsync(CancellationToken.None);
+
+        var unavailable = await GetCalendarConnectionAsync(provider);
+        Assert.Equal(before.Revision, unavailable.Revision);
+        Assert.Equal(before.SyncRequestedAt, unavailable.SyncRequestedAt);
+        Assert.Equal(0, unavailable.FailureCount);
+        Assert.Null(unavailable.Error);
+        Assert.Null(unavailable.NextAttemptAt);
+        Assert.Equal(0, google.RefreshCalls);
+        Assert.Empty(google.Upserts);
+
+        options.ClientId = "client";
+        options.ClientSecret = "secret";
+        await worker.RunOnceAsync(CancellationToken.None);
+        var recovered = await GetCalendarConnectionAsync(provider);
+        Assert.Equal(1L, recovered.LastSyncedVersion);
+        Assert.Null(recovered.SyncRequestedAt);
+        Assert.Equal(0, recovered.FailureCount);
+        Assert.Null(recovered.Error);
+        Assert.Equal(1, google.RefreshCalls);
+        Assert.Single(google.Upserts);
+    }
+
+    [Theory]
     [InlineData(HttpStatusCode.BadRequest)]
     [InlineData(HttpStatusCode.NotFound)]
     public async Task Permanent_sync_error_pauses_automatic_work_until_manual_retry(HttpStatusCode statusCode)

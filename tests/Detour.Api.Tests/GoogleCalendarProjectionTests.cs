@@ -64,6 +64,55 @@ public sealed class GoogleCalendarProjectionTests
     }
 
     [Fact]
+    public void Stay_is_suppressed_only_by_a_matching_active_accommodation_interval()
+    {
+        var checkIn = new DateOnly(2026, 10, 8);
+        var checkOut = new DateOnly(2026, 10, 11);
+        var trip = new TripSnapshot
+        {
+            Bookings =
+            [
+                new Booking { Id = "matching", Kind = "hotel", CheckIn = checkIn, CheckOut = checkOut },
+                new Booking
+                {
+                    Id = "timed-hotel", Kind = "hotel", CheckIn = checkIn, CheckOut = checkOut,
+                    Start = new DateTimeOffset(2026, 10, 9, 13, 0, 0, TimeSpan.FromHours(9)),
+                    End = new DateTimeOffset(2026, 10, 9, 14, 0, 0, TimeSpan.FromHours(9))
+                },
+                new Booking { Id = "date-only", Kind = "hotel", Date = checkIn },
+                new Booking { Id = "mismatch", Kind = "accommodation", CheckIn = checkIn.AddDays(1), CheckOut = checkOut },
+                new Booking { Id = "timed-train", Kind = "train", Start = new DateTimeOffset(2026, 10, 8, 12, 0, 0, TimeSpan.FromHours(9)) },
+                new Booking { Id = "cancelled", Kind = "hotel", Status = "cancelled", CheckIn = checkIn, CheckOut = checkOut },
+                new Booking { Id = "undated", Kind = "hotel" }
+            ],
+            Stays =
+            [
+                new Stay { Id = "matching-stay", BookingId = "matching", City = "Kyoto", CheckIn = checkIn, CheckOut = checkOut },
+                new Stay { Id = "timed-hotel-stay", BookingId = "timed-hotel", City = "Osaka", CheckIn = checkIn, CheckOut = checkOut },
+                new Stay { Id = "date-only-stay", BookingId = "date-only", City = "Kyoto", CheckIn = checkIn, CheckOut = checkOut },
+                new Stay { Id = "mismatch-stay", BookingId = "mismatch", City = "Kyoto", CheckIn = checkIn, CheckOut = checkOut },
+                new Stay { Id = "timed-train-stay", BookingId = "timed-train", City = "Kyoto", CheckIn = checkIn, CheckOut = checkOut },
+                new Stay { Id = "cancelled-stay", BookingId = "cancelled", City = "Kyoto", CheckIn = checkIn, CheckOut = checkOut },
+                new Stay { Id = "undated-stay", BookingId = "undated", City = "Kyoto", CheckIn = checkIn, CheckOut = checkOut }
+            ]
+        };
+
+        var events = GoogleCalendarProjection.Build(trip);
+
+        Assert.Contains("booking:matching", events.Keys);
+        Assert.DoesNotContain("stay:matching-stay", events.Keys);
+        Assert.Contains("stay:timed-hotel-stay", events.Keys);
+        Assert.Equal("2026-10-08", events["stay:timed-hotel-stay"]["start"]!["date"]!.GetValue<string>());
+        Assert.Equal("2026-10-11", events["stay:timed-hotel-stay"]["end"]!["date"]!.GetValue<string>());
+        Assert.Equal("Osaka", events["stay:timed-hotel-stay"]["location"]!.GetValue<string>());
+        Assert.Contains("stay:date-only-stay", events.Keys);
+        Assert.Contains("stay:mismatch-stay", events.Keys);
+        Assert.Contains("stay:timed-train-stay", events.Keys);
+        Assert.Contains("stay:cancelled-stay", events.Keys);
+        Assert.Contains("stay:undated-stay", events.Keys);
+    }
+
+    [Fact]
     public void Unknown_duration_is_an_explicit_marker_and_untimed_activity_stays_date_only()
     {
         var trip = new TripSnapshot

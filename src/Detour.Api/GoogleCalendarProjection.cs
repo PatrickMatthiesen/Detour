@@ -55,7 +55,8 @@ public static class GoogleCalendarProjection
         }
         foreach (var stay in snapshot.Stays.Where(x => !Cancelled(x.Status)))
         {
-            if (!string.IsNullOrEmpty(stay.BookingId) && events.ContainsKey($"booking:{stay.BookingId}")) continue;
+            if (!string.IsNullOrEmpty(stay.BookingId)
+                && snapshot.Bookings.Any(booking => booking.Id == stay.BookingId && RepresentsStayInterval(booking, stay))) continue;
             var title = string.IsNullOrWhiteSpace(stay.Name) ? $"Stay in {stay.City}" : stay.Name;
             var body = Event(title, Join(stay.Notes, "Planned city stay; not a hotel reservation."), stay.Status, stay.City, Search(stay.City));
             AllDay(body, stay.CheckIn, stay.CheckOut);
@@ -123,6 +124,26 @@ public static class GoogleCalendarProjection
     }
 
     private static bool Cancelled(string? status) => status?.Equals("cancelled", StringComparison.OrdinalIgnoreCase) == true || status?.Equals("canceled", StringComparison.OrdinalIgnoreCase) == true;
+    private static bool RepresentsStayInterval(Booking booking, Stay stay)
+    {
+        var kind = booking.Kind?.Trim() ?? "";
+        var accommodation = kind.Equals("hotel", StringComparison.OrdinalIgnoreCase)
+            || kind.Equals("accommodation", StringComparison.OrdinalIgnoreCase)
+            || kind.Equals("lodging", StringComparison.OrdinalIgnoreCase)
+            || kind.Equals("hostel", StringComparison.OrdinalIgnoreCase)
+            || kind.Equals("ryokan", StringComparison.OrdinalIgnoreCase)
+            || kind.Equals("guesthouse", StringComparison.OrdinalIgnoreCase)
+            || kind.Equals("apartment", StringComparison.OrdinalIgnoreCase)
+            || kind.Equals("airbnb", StringComparison.OrdinalIgnoreCase);
+        return !Cancelled(booking.Status)
+            && accommodation
+            && booking.Start is null
+            && booking.CheckIn is { } checkIn
+            && booking.CheckOut is { } checkOut
+            && checkOut > checkIn
+            && checkIn == stay.CheckIn
+            && checkOut == stay.CheckOut;
+    }
     private static string Join(params string?[] lines) => string.Join("\n\n", lines.Where(x => !string.IsNullOrWhiteSpace(x)));
     private static string? Search(string? query) => string.IsNullOrWhiteSpace(query) ? null : $"https://www.google.com/maps/search/?api=1&query={Uri.EscapeDataString(query)}";
     private static string Directions(string origin, string destination, string? mode)

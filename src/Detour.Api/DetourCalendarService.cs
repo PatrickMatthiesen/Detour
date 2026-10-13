@@ -130,6 +130,7 @@ public sealed class DetourCalendarService(
 
     public async Task SyncOwnerAsync(string ownerId, CancellationToken cancellationToken = default)
     {
+        if (!options.Configured) return;
         using var held = await ownerLock.AcquireAsync(ownerId, cancellationToken);
         db.ChangeTracker.Clear();
         var connection = await db.GoogleCalendarConnections.SingleOrDefaultAsync(x => x.OwnerId == ownerId, cancellationToken);

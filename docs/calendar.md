@@ -17,7 +17,7 @@ No additional client ID or secret is required. Calendar connection requests offl
 
 The Plan page starts the connection. Google consent creates a secondary calendar owned by the connected account. Detour then syncs saved activities, stays, bookings, travel legs, and trip arrival or departure anchors. Saved place ideas are not calendar events.
 
-The worker reads the persisted trip JSON and checks for newer trip versions every 15 seconds, so sync continues after the browser closes. A manual retry queues another attempt. Transient Google errors use a short HTTP retry followed by a database-backed retry delay. Permanent API rejections and invalid plan data pause automatic sync while preserving the error. Correct the issue and choose Retry sync to resume. An expired or revoked grant stops retries and asks the user to reconnect.
+The worker reads the persisted trip JSON and checks for newer trip versions every 15 seconds, so sync continues after the browser closes. A manual retry queues another attempt. If deployment Google credentials are missing, sync leaves pending work intact and resumes when configuration is restored. Transient Google errors use a short HTTP retry followed by a database-backed retry delay. Permanent API rejections and invalid plan data pause automatic sync while preserving the error. Correct the issue and choose Retry sync to resume. An expired or revoked grant stops retries and asks the user to reconnect.
 
 Event IDs come from a stable hash of the Detour record key. Detour tracks the events it manages and deletes only tracked events that disappear from the projection. It never lists, imports, or deletes unrelated Google events.
 
@@ -25,7 +25,7 @@ Disconnecting deletes the local encrypted credential and event tracking. The rem
 
 Google can create a calendar and lose the HTTP response before Detour receives its ID. Detour records each creation attempt before calling Google. If the result is uncertain, it does not issue another create request. The status reports an error and requires disconnecting before reconnecting. This avoids automatic duplicate creation, though the uncertain calendar may remain in the Google account.
 
-A definite rate-limit rejection (HTTP 429) leaves creation available for retry. Network failures, server failures, and unreadable success responses keep the creation guard because Google may already have created the calendar. Reconnecting after an uncertain outcome preserves an actionable error and the Disconnect control.
+A definite rate-limit rejection (HTTP 429 or a Google rate-limit reason with HTTP 403) leaves creation available for retry. Network failures, server failures, and unreadable success responses keep the creation guard because Google may already have created the calendar. Reconnecting after an uncertain outcome preserves an actionable error and the Disconnect control.
 
 The per-owner synchronization lock is process-local. The current self-hosted deployment runs one API process, which matches this design. Multiple API replicas would require a distributed lock before enabling calendar sync.
 
