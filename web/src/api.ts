@@ -12,6 +12,7 @@ export interface CalendarStatus {
   lastSyncedVersion: number | null;
   lastSyncedAt: string | null;
   error: string | null;
+  syncPending?: boolean;
 }
 
 async function calendarRequest<T>(path: string, method = "GET"): Promise<T> {

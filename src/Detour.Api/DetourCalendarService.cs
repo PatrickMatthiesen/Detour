@@ -29,7 +29,8 @@ public sealed record CalendarConnectionStatus(
     string? CalendarId,
     long? LastSyncedVersion,
     DateTimeOffset? LastSyncedAt,
-    string? Error);
+    string? Error,
+    bool SyncPending = false);
 
 public sealed class DetourCalendarService(
     TripDbContext db,
@@ -314,7 +315,9 @@ public sealed class DetourCalendarService(
         row?.CalendarId,
         row?.LastSyncedVersion,
         row?.LastSyncedAt,
-        row?.Error);
+        row?.Error,
+        row is not null && !row.ReauthorizationRequired && row.SyncRequestedAt is not null
+            && (row.FailureCount == 0 || row.NextAttemptAt is not null));
 
     internal static bool HasCalendarScope(string? scopes)
         => (scopes ?? "").Split([' ', ','], StringSplitOptions.RemoveEmptyEntries).Contains(DetourCalendarOptions.Scope, StringComparer.Ordinal);

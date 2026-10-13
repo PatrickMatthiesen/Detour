@@ -137,6 +137,7 @@ public sealed class GoogleCalendarSyncTests
         Assert.Single(google.Deletes, managed.GoogleEventId);
         Assert.Contains("unrelated-google-event", google.RemoteEventIds);
         Assert.Equal(3, db.GoogleCalendarConnections.Single().LastSyncedVersion);
+        Assert.False((await service.GetStatusAsync("owner-1")).SyncPending);
     }
 
     [Fact]
@@ -580,6 +581,8 @@ public sealed class GoogleCalendarSyncTests
         Assert.False(paused.ReauthorizationRequired);
         Assert.True(paused.FailureCount > 0);
         Assert.Null(paused.NextAttemptAt);
+        await using (var scope = provider.CreateAsyncScope())
+            Assert.False((await scope.ServiceProvider.GetRequiredService<DetourCalendarService>().GetStatusAsync("owner-1")).SyncPending);
         Assert.Contains(((int)statusCode).ToString(), paused.Error);
         Assert.Contains("Retry sync", paused.Error);
         Assert.Equal(1, google.RefreshCalls);
@@ -599,6 +602,7 @@ public sealed class GoogleCalendarSyncTests
             await service.RequestSyncAsync("owner-1");
             var retryRequested = await service.GetStatusAsync("owner-1");
             Assert.Null(retryRequested.Error);
+            Assert.True(retryRequested.SyncPending);
             await service.SyncOwnerAsync("owner-1");
         }
 
@@ -798,6 +802,11 @@ public sealed class GoogleCalendarSyncTests
         Assert.False(connection.CalendarCreationAttempted);
         Assert.Null(connection.CalendarId);
         Assert.Contains(reason is null ? "429" : "403", afterRejection.Error);
+        Assert.True(afterRejection.SyncPending);
+        var pendingRetry = await service.RequestSyncAsync("owner-1");
+        Assert.True(pendingRetry.SyncPending);
+        Assert.False(pendingRetry.Connected);
+        Assert.Null(pendingRetry.Error);
 
         await service.CompleteAuthorizationAsync("owner-1", "google-subject-1", "refresh", "access", DetourCalendarOptions.Scope);
         await service.CompleteAuthorizationAsync("owner-1", "google-subject-1", "refresh", "access", DetourCalendarOptions.Scope);

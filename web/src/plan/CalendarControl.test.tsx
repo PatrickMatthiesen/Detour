@@ -28,6 +28,18 @@ const disconnectedWithError: CalendarStatus = {
   error: "Calendar access needs attention.",
 };
 
+const failedCreation: CalendarStatus = {
+  ...disconnectedWithError,
+  calendarId: null,
+  error: "Calendar creation failed with status 429.",
+};
+
+const queuedRetry: CalendarStatus = {
+  ...failedCreation,
+  error: null,
+  syncPending: true,
+};
+
 beforeEach(() => {
   vi.useFakeTimers();
   vi.resetAllMocks();
@@ -44,21 +56,33 @@ async function flushEffects() {
 }
 
 describe("CalendarControl status polling", () => {
-  it("continues polling after failed calendar creation while disconnected", async () => {
+  it("keeps polling a manually queued retry after failed calendar creation", async () => {
     calendarApi.getCalendarStatus
-      .mockResolvedValueOnce({ ...disconnectedWithError, calendarId: null, error: "Calendar creation failed with status 429." })
+      .mockResolvedValueOnce(failedCreation)
+      .mockResolvedValueOnce(queuedRetry)
+      .mockResolvedValueOnce(queuedRetry)
       .mockResolvedValueOnce(connected);
+    calendarApi.syncCalendar.mockResolvedValue(queuedRetry);
     render(<CalendarControl />);
     await flushEffects();
 
     expect(screen.getByRole("status").textContent).toContain("Calendar creation failed with status 429.");
     expect(screen.getByRole("button", { name: "Disconnect" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Connect Google" })).toBeTruthy();
+    await act(async () => { screen.getByRole("button", { name: "Retry sync" }).click(); });
+    expect(calendarApi.syncCalendar).toHaveBeenCalledTimes(1);
 
     await act(async () => { await vi.advanceTimersByTimeAsync(15000); });
-    expect(calendarApi.getCalendarStatus).toHaveBeenCalledTimes(2);
+    expect(screen.getByText("Calendar setup retry is queued.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Sync pending" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Disconnect" })).toBeTruthy();
+    expect(calendarApi.getCalendarStatus).toHaveBeenCalledTimes(3);
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(15000); });
+    expect(calendarApi.getCalendarStatus).toHaveBeenCalledTimes(4);
     expect(screen.getByText("Connected · Detour sends trip changes one way")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Retry sync" })).toBeTruthy();
-    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.queryByText("Calendar setup retry is queued.")).toBeNull();
   });
 
   it("clears a temporary status transport error after the next successful poll", async () => {

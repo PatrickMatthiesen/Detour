@@ -117,8 +117,10 @@ public static class GoogleCalendarProjection
 
     private static void AllDay(JsonObject body, DateOnly start, DateOnly? end = null)
     {
+        if (end is { } explicitEnd && explicitEnd <= start)
+            throw new ArgumentException("A calendar stay or booking must end after its start date.");
         body["start"] = new JsonObject { ["date"] = start.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) };
-        body["end"] = new JsonObject { ["date"] = (end is { } value && value > start ? value : start.AddDays(1)).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) };
+        body["end"] = new JsonObject { ["date"] = (end ?? start.AddDays(1)).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) };
         body["transparency"] = "transparent";
         body["description"] = body["description"]!.GetValue<string>() + "\nDate-only plan; clock time is not set.";
     }

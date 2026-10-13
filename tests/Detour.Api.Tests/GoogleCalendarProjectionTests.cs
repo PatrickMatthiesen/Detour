@@ -63,6 +63,31 @@ public sealed class GoogleCalendarProjectionTests
         Assert.DoesNotContain("CODE", body.ToJsonString());
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void Explicit_non_later_checkout_is_rejected_instead_of_expanding_the_stay(int nights)
+    {
+        var start = new DateOnly(2026, 10, 8);
+        var snapshot = new TripSnapshot
+        {
+            Stays = [new Stay { Id = "stay", City = "Kyoto", CheckIn = start, CheckOut = start.AddDays(nights) }]
+        };
+        Assert.Throws<ArgumentException>(() => GoogleCalendarProjection.Build(snapshot));
+    }
+
+    [Fact]
+    public void Booking_without_checkout_keeps_a_single_date_marker()
+    {
+        var snapshot = new TripSnapshot
+        {
+            Bookings = [new Booking { Id = "hotel", Kind = "hotel", CheckIn = new(2026, 10, 8) }]
+        };
+        var body = GoogleCalendarProjection.Build(snapshot)["booking:hotel"];
+        Assert.Equal("2026-10-08", body["start"]!["date"]!.GetValue<string>());
+        Assert.Equal("2026-10-09", body["end"]!["date"]!.GetValue<string>());
+    }
+
     [Fact]
     public void Stay_is_suppressed_only_by_a_matching_active_accommodation_interval()
     {

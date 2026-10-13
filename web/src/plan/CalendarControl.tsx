@@ -31,10 +31,10 @@ export default function CalendarControl() {
 
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => {
-    if (!status.configured || (!status.connected && !status.error)) return;
+    if (!status.configured || (!status.connected && !status.error && !status.syncPending)) return;
     const timer = window.setInterval(() => void refresh(), 15000);
     return () => window.clearInterval(timer);
-  }, [refresh, status.configured, status.connected, status.error]);
+  }, [refresh, status.configured, status.connected, status.error, status.syncPending]);
   useEffect(() => {
     window.addEventListener("focus", refresh);
     return () => window.removeEventListener("focus", refresh);
@@ -92,11 +92,14 @@ export default function CalendarControl() {
     <div className="plan-google-calendar-actions">
       {status.connected ? <>
         <MutationButton type="button" onClick={() => void retrySync()} disabled={busy}><RefreshCw size={14}/> Retry sync</MutationButton>
-      </> : <MutationButton type="button" onClick={() => void connect()} disabled={busy || !status.configured}><Link2 size={14}/> Connect Google</MutationButton>}
-      {(status.connected || status.calendarId || status.error) && <MutationButton type="button" onClick={() => void run(disconnectCalendar)} disabled={busy}><Unplug size={14}/> Disconnect</MutationButton>}
+      </> : status.syncPending ? <MutationButton type="button" disabled><LoaderCircle size={14}/> Sync pending</MutationButton>
+        : <MutationButton type="button" onClick={() => void connect()} disabled={busy || !status.configured}><Link2 size={14}/> Connect Google</MutationButton>}
+      {!status.connected && status.configured && status.error && <MutationButton type="button" onClick={() => void retrySync()} disabled={busy}><RefreshCw size={14}/> Retry sync</MutationButton>}
+      {(status.connected || status.calendarId || status.error || status.syncPending) && <MutationButton type="button" onClick={() => void run(disconnectCalendar)} disabled={busy}><Unplug size={14}/> Disconnect</MutationButton>}
       {busy && <LoaderCircle className="plan-calendar-spinner" size={14} aria-label="Working"/>}
     </div>
     {!!visibleErrors.length && <p className="plan-google-calendar-error" role="status">{visibleErrors.join(" · ")} {status.connected && <MutationButton type="button" onClick={() => void connect()} disabled={busy}>Reconnect</MutationButton>}</p>}
+    {!status.connected && status.syncPending && <p className="plan-google-calendar-sync" role="status">Calendar setup retry is queued.</p>}
     {status.connected && status.lastSyncedAt && <p className="plan-google-calendar-sync">Last synced {new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(status.lastSyncedAt))}</p>}
   </section>;
 }
