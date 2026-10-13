@@ -3,10 +3,12 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Detour.Api;
 
 namespace Detour.Api.Tests;
@@ -86,8 +88,11 @@ public sealed class ApiRateLimitsTests
         using var otherOwner = await client.GetAsync("/api/calendar?owner=owner-b");
 
         Assert.Equal(HttpStatusCode.OK, status.StatusCode);
+        Assert.Contains("owner=owner-a;authenticated=True;ownerBurst=2;ownerPerMinute=100",
+            GetLimiterDiagnostics(status));
         Assert.Equal(HttpStatusCode.OK, sync.StatusCode);
-        Assert.Equal(HttpStatusCode.TooManyRequests, limitedDisconnect.StatusCode);
+        Assert.True(limitedDisconnect.StatusCode == HttpStatusCode.TooManyRequests,
+            GetLimiterDiagnostics(status, sync, limitedDisconnect, otherOwner));
         Assert.False(limitedDisconnect.Headers.Contains("WWW-Authenticate"));
         Assert.Equal(HttpStatusCode.OK, otherOwner.StatusCode);
     }
@@ -213,6 +218,24 @@ public sealed class ApiRateLimitsTests
             }
             await next();
         });
+        app.Use(async (context, next) =>
+        {
+            context.Response.OnStarting(() =>
+            {
+                var settings = context.RequestServices.GetRequiredService<IOptionsMonitor<ApiRateLimitSettings>>().CurrentValue;
+                var limiter = context.RequestServices.GetRequiredService<IOptions<RateLimiterOptions>>().Value.GlobalLimiter;
+                var statistics = limiter?.GetStatistics(context);
+                var owner = context.User.FindFirst("sub")?.Value ?? "<missing>";
+                context.Response.Headers["X-Test-Rate-Limiter"] =
+                    $"owner={owner};authenticated={context.User.Identity?.IsAuthenticated};" +
+                    $"ownerBurst={settings.OwnerBurst};ownerPerMinute={settings.OwnerRequestsPerMinute};" +
+                    $"available={(statistics is null ? "null" : statistics.CurrentAvailablePermits.ToString())};" +
+                    $"successful={statistics?.TotalSuccessfulLeases.ToString() ?? "null"};" +
+                    $"failed={statistics?.TotalFailedLeases.ToString() ?? "null"}";
+                return Task.CompletedTask;
+            });
+            await next();
+        });
         app.UseWhen(context => !ApiRateLimits.IsOAuthRequest(context), branch => branch.UseRateLimiter());
         if (syncGate is not null)
             app.Use(async (context, next) =>
@@ -230,6 +253,14 @@ public sealed class ApiRateLimitsTests
         app.MapDetourCalendar();
         return app;
     }
+
+    private static string GetLimiterDiagnostics(params HttpResponseMessage[] responses)
+        => string.Join(" | ", responses.Select(response =>
+            $"{response.RequestMessage?.Method} {response.RequestMessage?.RequestUri?.PathAndQuery}: " +
+            $"status={(int)response.StatusCode}; " +
+            (response.Headers.TryGetValues("X-Test-Rate-Limiter", out var values)
+                ? string.Join("; ", values)
+                : "rate-limiter diagnostics header was missing.")));
 
     private sealed class EmptyGoogleCalendarClient : IGoogleCalendarClient
     {
