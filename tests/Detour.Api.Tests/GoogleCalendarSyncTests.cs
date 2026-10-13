@@ -308,6 +308,62 @@ public sealed class GoogleCalendarSyncTests
         Assert.Contains("Disconnect", connection.Error);
     }
 
+    [Theory]
+    [InlineData("rateLimitExceeded")]
+    [InlineData("userRateLimitExceeded")]
+    public async Task Google_client_retries_403_rate_limits_and_marks_exhausted_retries_transient(string reason)
+    {
+        var attempts = 0;
+        var handler = new RecordingHandler(_ => ++attempts == 2
+            ? new HttpResponseMessage(HttpStatusCode.OK)
+            : GoogleForbidden(reason));
+        var client = new GoogleCalendarClient(new StaticHttpClientFactory(handler),
+            new DetourCalendarOptions { ClientId = "client", ClientSecret = "secret" });
+
+        await client.UpsertEventAsync("access", "calendar", "event-id", new JsonObject(), CancellationToken.None);
+        Assert.Equal(2, handler.Requests.Count);
+
+        var exhaustedHandler = new RecordingHandler(_ => GoogleForbidden(reason));
+        var exhaustedClient = new GoogleCalendarClient(new StaticHttpClientFactory(exhaustedHandler),
+            new DetourCalendarOptions { ClientId = "client", ClientSecret = "secret" });
+        var error = await Assert.ThrowsAsync<CalendarRemoteException>(() =>
+            exhaustedClient.UpsertEventAsync("access", "calendar", "event-id", new JsonObject(), CancellationToken.None));
+        Assert.True(error.Transient);
+        Assert.False(error.OutcomeUncertain);
+        Assert.Equal(3, exhaustedHandler.Requests.Count);
+    }
+
+    [Fact]
+    public async Task Google_client_does_not_retry_permanent_403_errors()
+    {
+        var handler = new RecordingHandler(_ => GoogleForbidden("forbiddenForNonOrganizer"));
+        var client = new GoogleCalendarClient(new StaticHttpClientFactory(handler),
+            new DetourCalendarOptions { ClientId = "client", ClientSecret = "secret" });
+        var error = await Assert.ThrowsAsync<CalendarRemoteException>(() =>
+            client.UpsertEventAsync("access", "calendar", "event-id", new JsonObject(), CancellationToken.None));
+        Assert.False(error.Transient);
+        Assert.Single(handler.Requests);
+    }
+
+    [Fact]
+    public async Task Google_client_requires_reauthorization_for_403_permission_errors()
+    {
+        var handler = new RecordingHandler(_ => GoogleForbidden("insufficientPermissions"));
+        var client = new GoogleCalendarClient(new StaticHttpClientFactory(handler),
+            new DetourCalendarOptions { ClientId = "client", ClientSecret = "secret" });
+        await Assert.ThrowsAsync<CalendarReauthorizationException>(() =>
+            client.UpsertEventAsync("access", "calendar", "event-id", new JsonObject(), CancellationToken.None));
+        Assert.Single(handler.Requests);
+    }
+
+    private static HttpResponseMessage GoogleForbidden(string reason) => new(HttpStatusCode.Forbidden)
+    {
+        Content = new StringContent(JsonSerializer.Serialize(new
+        {
+            error = new { errors = new[] { new { reason } }, code = 403 }
+        }), System.Text.Encoding.UTF8, "application/json")
+    };
+
     [Fact]
     public async Task Google_client_treats_gone_as_an_idempotent_delete()
     {
@@ -354,15 +410,18 @@ public sealed class GoogleCalendarSyncTests
         Assert.Contains("Disconnect", status.Error);
     }
 
-    [Fact]
-    public async Task Calendar_creation_rate_limit_is_retryable_and_successful_reconnect_does_not_create_again()
+    [Theory]
+    [InlineData(null)]
+    [InlineData("rateLimitExceeded")]
+    [InlineData("userRateLimitExceeded")]
+    public async Task Calendar_creation_rate_limit_is_retryable_and_successful_reconnect_does_not_create_again(string? reason)
     {
         await using var db = CreateDb();
         db.Users.Add(new ApplicationUser { Id = "owner-1", UserName = "owner@example.test" });
         await db.SaveChangesAsync();
         var responses = new Queue<HttpResponseMessage>(
         [
-            new HttpResponseMessage(HttpStatusCode.TooManyRequests),
+            reason is null ? new HttpResponseMessage(HttpStatusCode.TooManyRequests) : GoogleForbidden(reason),
             new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent("{\"id\":\"detour-calendar\"}", System.Text.Encoding.UTF8, "application/json")
@@ -381,7 +440,7 @@ public sealed class GoogleCalendarSyncTests
         Assert.False(rejected.OutcomeUncertain);
         Assert.False(connection.CalendarCreationAttempted);
         Assert.Null(connection.CalendarId);
-        Assert.Contains("429", afterRejection.Error);
+        Assert.Contains(reason is null ? "429" : "403", afterRejection.Error);
 
         await service.CompleteAuthorizationAsync("owner-1", "google-subject-1", "refresh", "access", DetourCalendarOptions.Scope);
         await service.CompleteAuthorizationAsync("owner-1", "google-subject-1", "refresh", "access", DetourCalendarOptions.Scope);

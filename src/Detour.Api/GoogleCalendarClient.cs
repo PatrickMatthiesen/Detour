@@ -152,7 +152,10 @@ public sealed class GoogleCalendarClient(IHttpClientFactory clients, DetourCalen
                 await Task.Delay(TimeSpan.FromMilliseconds(200 * (1 << attempt)), cancellationToken);
                 continue;
             }
-            if (attempt < 2 && IsTransient(response.StatusCode))
+            var code = response.StatusCode == HttpStatusCode.Forbidden
+                ? await ReadErrorCodeAsync(response, cancellationToken)
+                : null;
+            if (attempt < 2 && IsTransient(response.StatusCode, code))
             {
                 response.Dispose();
                 await Task.Delay(TimeSpan.FromMilliseconds(200 * (1 << attempt)), cancellationToken);
@@ -179,12 +182,13 @@ public sealed class GoogleCalendarClient(IHttpClientFactory clients, DetourCalen
         if (response.StatusCode == HttpStatusCode.Forbidden && code is "insufficientPermissions" or "insufficient_scope")
             throw new CalendarReauthorizationException("Google Calendar permission is missing. Reconnect and approve calendar access.");
         throw new CalendarRemoteException($"Could not {action}. Google returned {(int)response.StatusCode}.",
-            transient: IsTransient(response.StatusCode),
+            transient: IsTransient(response.StatusCode, code),
             outcomeUncertain: creationRequest && (response.StatusCode == HttpStatusCode.RequestTimeout || (int)response.StatusCode >= 500));
     }
 
-    private static bool IsTransient(HttpStatusCode status)
-        => status is HttpStatusCode.RequestTimeout or HttpStatusCode.TooManyRequests || (int)status >= 500;
+    private static bool IsTransient(HttpStatusCode status, string? code = null)
+        => status is HttpStatusCode.RequestTimeout or HttpStatusCode.TooManyRequests || (int)status >= 500
+            || status == HttpStatusCode.Forbidden && code is "rateLimitExceeded" or "userRateLimitExceeded";
 
     private static async Task<string?> ReadErrorCodeAsync(HttpResponseMessage response, CancellationToken cancellationToken)
     {
