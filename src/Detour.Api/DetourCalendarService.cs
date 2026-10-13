@@ -90,7 +90,14 @@ public sealed class DetourCalendarService(
         row.Revision = Guid.NewGuid();
         await db.SaveChangesAsync(cancellationToken);
         if (string.IsNullOrWhiteSpace(row.CalendarId))
-            await CreateCalendarOnceAsync(row, accessToken, cancellationToken);
+        {
+            try { await CreateCalendarOnceAsync(row, accessToken, cancellationToken); }
+            catch (CalendarRemoteException ex)
+            {
+                await RecordRemoteFailureAsync(row, ex, cancellationToken);
+                throw;
+            }
+        }
     }
 
     public async Task<CalendarConnectionStatus> RequestSyncAsync(string ownerId, CancellationToken cancellationToken = default)
@@ -100,7 +107,11 @@ public sealed class DetourCalendarService(
         if (row is null) return ToStatus(null);
         row.SyncRequestedAt = DateTimeOffset.UtcNow;
         row.NextAttemptAt = null;
-        row.Error = row.ReauthorizationRequired ? row.Error : null;
+        if (!row.ReauthorizationRequired)
+        {
+            row.Error = null;
+            row.FailureCount = 0;
+        }
         row.UpdatedAt = DateTimeOffset.UtcNow;
         row.Revision = Guid.NewGuid();
         await db.SaveChangesAsync(cancellationToken);
@@ -123,6 +134,8 @@ public sealed class DetourCalendarService(
         db.ChangeTracker.Clear();
         var connection = await db.GoogleCalendarConnections.SingleOrDefaultAsync(x => x.OwnerId == ownerId, cancellationToken);
         if (connection is null || connection.ReauthorizationRequired) return;
+        // A failed attempt without a next-attempt time requires a manual retry.
+        if (connection.FailureCount > 0 && connection.NextAttemptAt is null) return;
         var trip = await db.Trips.AsNoTracking().SingleOrDefaultAsync(x => x.OwnerId == ownerId, cancellationToken);
         if (trip is null) return;
         if (connection.LastSyncedVersion == trip.Version && connection.SyncRequestedAt is null) return;
@@ -181,31 +194,49 @@ public sealed class DetourCalendarService(
         }
         catch (CalendarReauthorizationException ex)
         {
-            await RecordFailureAsync(connection, ex.Message, true, cancellationToken);
+            await RecordFailureAsync(connection, ex.Message, true, false, cancellationToken);
         }
         catch (CryptographicException)
         {
-            await RecordFailureAsync(connection, "The saved Google Calendar credential can no longer be decrypted. Reconnect Google Calendar in Detour.", true, cancellationToken);
+            await RecordFailureAsync(connection, "The saved Google Calendar credential can no longer be decrypted. Reconnect Google Calendar in Detour.", true, false, cancellationToken);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            await RecordFailureAsync(connection, "Google Calendar timed out. Detour will retry automatically.", false, cancellationToken);
+            await RecordFailureAsync(connection, "Google Calendar timed out. Detour will retry automatically.", false, true, cancellationToken);
         }
-        catch (Exception ex) when (ex is CalendarRemoteException or HttpRequestException or TimeoutException or JsonException or ArgumentException or InvalidOperationException)
+        catch (CalendarRemoteException ex)
         {
-            var message = ex is CalendarRemoteException remote ? remote.Message : $"Calendar sync failed: {ex.Message}";
-            await RecordFailureAsync(connection, message, false, cancellationToken);
+            await RecordRemoteFailureAsync(connection, ex, cancellationToken);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TimeoutException)
+        {
+            await RecordFailureAsync(connection, "Google Calendar could not be reached. Detour will retry automatically.", false, true, cancellationToken);
+        }
+        catch (Exception ex) when (ex is JsonException or ArgumentException or InvalidOperationException)
+        {
+            await RecordFailureAsync(connection, $"Calendar sync failed: {ex.Message}", false, false, cancellationToken);
         }
     }
 
-    private async Task RecordFailureAsync(GoogleCalendarConnectionRow connection, string error, bool reauthorizationRequired, CancellationToken cancellationToken)
+    private Task RecordRemoteFailureAsync(GoogleCalendarConnectionRow connection, CalendarRemoteException error, CancellationToken cancellationToken)
     {
+        var message = error.Message;
+        if (error.OutcomeUncertain && !message.Contains("Disconnect", StringComparison.OrdinalIgnoreCase))
+            message += " Disconnect before reconnecting to avoid duplicate calendars.";
+        return RecordFailureAsync(connection, message, false, error.Transient && !error.OutcomeUncertain, cancellationToken);
+    }
+
+    private async Task RecordFailureAsync(GoogleCalendarConnectionRow connection, string error, bool reauthorizationRequired, bool automaticRetry, CancellationToken cancellationToken)
+    {
+        var creationUncertain = connection.CalendarCreationAttempted && string.IsNullOrWhiteSpace(connection.CalendarId);
+        if (!reauthorizationRequired && !automaticRetry && !creationUncertain)
+            error += " Automatic sync is paused. Correct the issue, then choose Retry sync.";
         connection.Error = error.Length <= 1000 ? error : error[..1000];
         connection.ReauthorizationRequired = reauthorizationRequired;
         connection.FailureCount++;
-        connection.NextAttemptAt = reauthorizationRequired
-            ? null
-            : DateTimeOffset.UtcNow.AddMinutes(Math.Min(60, 1 << Math.Min(connection.FailureCount - 1, 5)));
+        connection.NextAttemptAt = !reauthorizationRequired && automaticRetry
+            ? DateTimeOffset.UtcNow.AddMinutes(Math.Min(60, 1 << Math.Min(connection.FailureCount - 1, 5)))
+            : null;
         connection.UpdatedAt = DateTimeOffset.UtcNow;
         connection.Revision = Guid.NewGuid();
         await db.SaveChangesAsync(cancellationToken);

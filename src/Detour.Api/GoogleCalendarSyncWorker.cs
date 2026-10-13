@@ -30,6 +30,7 @@ public sealed class GoogleCalendarSyncWorker(IServiceScopeFactory scopes, ILogge
             var now = DateTimeOffset.UtcNow;
             owners = await db.GoogleCalendarConnections.AsNoTracking()
                 .Where(x => !x.ReauthorizationRequired && (x.NextAttemptAt == null || x.NextAttemptAt <= now))
+                .Where(x => x.FailureCount == 0 || x.NextAttemptAt != null)
                 .Where(x => x.SyncRequestedAt != null || db.Trips.Any(t => t.OwnerId == x.OwnerId && t.Version != x.LastSyncedVersion))
                 .Select(x => x.OwnerId)
                 .ToArrayAsync(cancellationToken);

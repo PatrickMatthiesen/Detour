@@ -17,7 +17,7 @@ No additional client ID or secret is required. Calendar connection requests offl
 
 The Plan page starts the connection. Google consent creates a secondary calendar owned by the connected account. Detour then syncs saved activities, stays, bookings, travel legs, and trip arrival or departure anchors. Saved place ideas are not calendar events.
 
-The worker reads the persisted trip JSON and checks for newer trip versions every 15 seconds, so sync continues after the browser closes. A manual retry queues another attempt. Transient Google errors use a short HTTP retry followed by a database-backed retry delay. An expired or revoked grant stops retries and asks the user to reconnect.
+The worker reads the persisted trip JSON and checks for newer trip versions every 15 seconds, so sync continues after the browser closes. A manual retry queues another attempt. Transient Google errors use a short HTTP retry followed by a database-backed retry delay. Permanent API rejections and invalid plan data pause automatic sync while preserving the error. Correct the issue and choose Retry sync to resume. An expired or revoked grant stops retries and asks the user to reconnect.
 
 Event IDs come from a stable hash of the Detour record key. Detour tracks the events it manages and deletes only tracked events that disappear from the projection. It never lists, imports, or deletes unrelated Google events.
 

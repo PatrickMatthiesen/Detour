@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Detour.Api.Tests;
 
@@ -196,6 +197,88 @@ public sealed class GoogleCalendarSyncTests
         Assert.Null(connection.LastSyncedVersion);
     }
 
+    [Theory]
+    [InlineData(HttpStatusCode.BadRequest)]
+    [InlineData(HttpStatusCode.NotFound)]
+    public async Task Permanent_sync_error_pauses_automatic_work_until_manual_retry(HttpStatusCode statusCode)
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var dataProtection = new EphemeralDataProtectionProvider();
+        var google = new FakeGoogleCalendarClient
+        {
+            UpsertError = new CalendarRemoteException($"Google returned {(int)statusCode}.")
+        };
+        var services = CreateCalendarServiceProvider(dbName, dataProtection, google);
+        await using var provider = services.BuildServiceProvider();
+        await SeedCalendarTripAsync(provider, "owner-1");
+        await using (var scope = provider.CreateAsyncScope())
+        {
+            var service = scope.ServiceProvider.GetRequiredService<DetourCalendarService>();
+            await service.CompleteAuthorizationAsync("owner-1", "google-subject-1", "refresh", "access", DetourCalendarOptions.Scope);
+            await service.SyncOwnerAsync("owner-1");
+            await service.SyncOwnerAsync("owner-1");
+        }
+
+        var paused = await GetCalendarConnectionAsync(provider);
+        Assert.False(paused.ReauthorizationRequired);
+        Assert.True(paused.FailureCount > 0);
+        Assert.Null(paused.NextAttemptAt);
+        Assert.Contains(((int)statusCode).ToString(), paused.Error);
+        Assert.Contains("Retry sync", paused.Error);
+        Assert.Equal(1, google.RefreshCalls);
+        Assert.Single(google.Upserts);
+
+        var worker = new GoogleCalendarSyncWorker(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<GoogleCalendarSyncWorker>.Instance);
+        await worker.RunOnceAsync(CancellationToken.None);
+        Assert.Equal(1, google.RefreshCalls);
+        Assert.Single(google.Upserts);
+
+        google.UpsertError = null;
+        await using (var scope = provider.CreateAsyncScope())
+        {
+            var service = scope.ServiceProvider.GetRequiredService<DetourCalendarService>();
+            await service.RequestSyncAsync("owner-1");
+            var retryRequested = await service.GetStatusAsync("owner-1");
+            Assert.Null(retryRequested.Error);
+            await service.SyncOwnerAsync("owner-1");
+        }
+
+        var recovered = await GetCalendarConnectionAsync(provider);
+        Assert.Equal(0, recovered.FailureCount);
+        Assert.Null(recovered.NextAttemptAt);
+        Assert.Null(recovered.Error);
+        Assert.Equal(2, google.RefreshCalls);
+        Assert.Equal(2, google.Upserts.Count);
+    }
+
+    [Fact]
+    public async Task Transient_sync_error_keeps_automatic_retry_scheduled()
+    {
+        await using var db = CreateDb();
+        db.Users.Add(new ApplicationUser { Id = "owner-1", UserName = "owner@example.test" });
+        db.Trips.Add(new TripDocumentRow
+        {
+            Id = Guid.NewGuid(), OwnerId = "owner-1", Version = 1,
+            Json = JsonSerializer.Serialize(SnapshotWithActivity("activity-1"), new JsonSerializerOptions(JsonSerializerDefaults.Web)),
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+        var google = new FakeGoogleCalendarClient();
+        var service = CreateService(db, google);
+        await service.CompleteAuthorizationAsync("owner-1", "google-subject-1", "refresh-secret", "access", DetourCalendarOptions.Scope);
+        google.UpsertError = new CalendarRemoteException("Google returned 429.", transient: true);
+
+        await service.SyncOwnerAsync("owner-1");
+
+        var connection = db.GoogleCalendarConnections.Single();
+        Assert.Equal(1, connection.FailureCount);
+        Assert.True(connection.NextAttemptAt > DateTimeOffset.UtcNow);
+        Assert.False(connection.ReauthorizationRequired);
+        Assert.Contains("429", connection.Error);
+    }
+
     [Fact]
     public async Task Ambiguous_calendar_creation_is_not_repeated_automatically()
     {
@@ -382,6 +465,39 @@ public sealed class GoogleCalendarSyncTests
         => new(db, new CalendarOwnerLock(), new EphemeralDataProtectionProvider(), google,
             new DetourCalendarOptions { ClientId = "client", ClientSecret = "secret" });
 
+    private static ServiceCollection CreateCalendarServiceProvider(string dbName, IDataProtectionProvider dataProtection, FakeGoogleCalendarClient google)
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddDbContext<TripDbContext>(options => options.UseInMemoryDatabase(dbName));
+        services.AddSingleton(dataProtection);
+        services.AddSingleton(new CalendarOwnerLock());
+        services.AddSingleton<IGoogleCalendarClient>(google);
+        services.AddSingleton(new DetourCalendarOptions { ClientId = "client", ClientSecret = "secret" });
+        services.AddScoped<DetourCalendarService>();
+        return services;
+    }
+
+    private static async Task SeedCalendarTripAsync(IServiceProvider provider, string ownerId)
+    {
+        await using var scope = provider.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<TripDbContext>();
+        db.Users.Add(new ApplicationUser { Id = ownerId, UserName = "owner@example.test" });
+        db.Trips.Add(new TripDocumentRow
+        {
+            Id = Guid.NewGuid(), OwnerId = ownerId, Version = 1,
+            Json = JsonSerializer.Serialize(SnapshotWithActivity("activity-1"), new JsonSerializerOptions(JsonSerializerDefaults.Web)),
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+    }
+
+    private static async Task<GoogleCalendarConnectionRow> GetCalendarConnectionAsync(IServiceProvider provider)
+    {
+        await using var scope = provider.CreateAsyncScope();
+        return await scope.ServiceProvider.GetRequiredService<TripDbContext>().GoogleCalendarConnections.SingleAsync();
+    }
+
     private sealed class FakeGoogleCalendarClient : IGoogleCalendarClient
     {
         public List<(string EventId, JsonObject Body)> Upserts { get; } = [];
@@ -389,10 +505,15 @@ public sealed class GoogleCalendarSyncTests
         public HashSet<string> RemoteEventIds { get; } = [];
         public Exception? RefreshError { get; set; }
         public Exception? CreateError { get; set; }
+        public Exception? UpsertError { get; set; }
         public int CreateCalendarCalls { get; private set; }
+        public int RefreshCalls { get; private set; }
 
         public Task<string> RefreshAccessTokenAsync(string refreshToken, CancellationToken cancellationToken)
-            => RefreshError is null ? Task.FromResult("access") : Task.FromException<string>(RefreshError);
+        {
+            RefreshCalls++;
+            return RefreshError is null ? Task.FromResult("access") : Task.FromException<string>(RefreshError);
+        }
 
         public Task<string> CreateCalendarAsync(string accessToken, CancellationToken cancellationToken)
         {
@@ -403,6 +524,7 @@ public sealed class GoogleCalendarSyncTests
         public Task UpsertEventAsync(string accessToken, string calendarId, string eventId, JsonObject body, CancellationToken cancellationToken)
         {
             Upserts.Add((eventId, (JsonObject)body.DeepClone()));
+            if (UpsertError is not null) return Task.FromException(UpsertError);
             RemoteEventIds.Add(eventId);
             return Task.CompletedTask;
         }
