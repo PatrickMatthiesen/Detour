@@ -13,6 +13,34 @@ namespace Detour.Api.Tests;
 
 public sealed class GoogleCalendarSyncTests
 {
+    [Theory]
+    [InlineData(null, "secret")]
+    [InlineData("client", null)]
+    public async Task Persisted_connection_is_unavailable_when_deployment_credentials_are_missing(string? clientId, string? clientSecret)
+    {
+        await using var db = CreateDb();
+        db.GoogleCalendarConnections.Add(new GoogleCalendarConnectionRow
+        {
+            OwnerId = "owner-1", GoogleSubject = "google-subject-1",
+            CalendarId = "detour-calendar", EncryptedRefreshToken = "stored-credential",
+            GrantedScopes = DetourCalendarOptions.Scope, LastSyncedVersion = 7
+        });
+        await db.SaveChangesAsync();
+        var google = new FakeGoogleCalendarClient();
+        Assert.True((await CreateService(db, google).GetStatusAsync("owner-1")).Connected);
+        var unconfigured = new DetourCalendarService(db, new CalendarOwnerLock(),
+            new EphemeralDataProtectionProvider(), google,
+            new DetourCalendarOptions { ClientId = clientId, ClientSecret = clientSecret });
+
+        var status = await unconfigured.GetStatusAsync("owner-1");
+
+        Assert.False(status.Configured);
+        Assert.False(status.Connected);
+        Assert.Equal("detour-calendar", status.CalendarId);
+        Assert.Equal(7, status.LastSyncedVersion);
+        Assert.Single(db.GoogleCalendarConnections);
+    }
+
     [Fact]
     public void Calendar_oauth_uses_a_separate_callback_scope_and_offline_consent()
     {

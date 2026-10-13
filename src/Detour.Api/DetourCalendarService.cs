@@ -250,7 +250,7 @@ public sealed class DetourCalendarService(
 
     private CalendarConnectionStatus ToStatus(GoogleCalendarConnectionRow? row) => new(
         options.Configured,
-        row is not null && !row.ReauthorizationRequired && !string.IsNullOrWhiteSpace(row.CalendarId),
+        options.Configured && row is not null && !row.ReauthorizationRequired && !string.IsNullOrWhiteSpace(row.CalendarId),
         row?.CalendarId,
         row?.LastSyncedVersion,
         row?.LastSyncedAt,
