@@ -77,6 +77,7 @@ public sealed class GoogleCalendarManagedEventRow
     public string OwnerId { get; set; } = "";
     public string LocalKey { get; set; } = "";
     public string GoogleEventId { get; set; } = "";
+    public string? ContentHash { get; set; }
 }
 
 public sealed class TripDbContext(DbContextOptions<TripDbContext> options) : IdentityDbContext<ApplicationUser>(options)
@@ -120,6 +121,7 @@ public sealed class TripDbContext(DbContextOptions<TripDbContext> options) : Ide
             entity.Property(x => x.OwnerId).HasMaxLength(200);
             entity.Property(x => x.LocalKey).HasMaxLength(500);
             entity.Property(x => x.GoogleEventId).HasMaxLength(1024).IsRequired();
+            entity.Property(x => x.ContentHash).HasMaxLength(64);
         });
         modelBuilder.Entity<PhotoObjectDeletion>(entity =>
         {

@@ -141,6 +141,171 @@ public sealed class GoogleCalendarSyncTests
     }
 
     [Fact]
+    public async Task Automatic_sync_skips_unchanged_projection_and_advances_version_in_a_fresh_scope()
+    {
+        var databaseName = Guid.NewGuid().ToString();
+        await using var db = CreateDb(databaseName);
+        db.Users.Add(new ApplicationUser { Id = "owner-1", UserName = "owner@example.test" });
+        db.Trips.Add(new TripDocumentRow
+        {
+            Id = Guid.NewGuid(), OwnerId = "owner-1", Version = 1,
+            Json = JsonSerializer.Serialize(SnapshotWithActivity("activity-1"), new JsonSerializerOptions(JsonSerializerDefaults.Web)),
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+        var google = new FakeGoogleCalendarClient();
+        var service = CreateService(db, google);
+
+        await service.CompleteAuthorizationAsync("owner-1", "google-subject-1", "refresh-secret", "access", DetourCalendarOptions.Scope);
+        await service.SyncOwnerAsync("owner-1");
+        Assert.Single(google.Upserts);
+        Assert.Empty(google.Deletes);
+        Assert.Equal(1, google.RefreshCalls);
+
+        await using var persistedScope = CreateDb(databaseName);
+        var trip = await persistedScope.Trips.SingleAsync();
+        trip.Version = 2;
+        var unrelatedChange = SnapshotWithActivity("activity-1");
+        unrelatedChange.Trip.Name = "Renamed trip, calendar projection unchanged";
+        trip.Json = JsonSerializer.Serialize(unrelatedChange, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        await persistedScope.SaveChangesAsync();
+        var freshService = CreateService(persistedScope, google);
+
+        await freshService.SyncOwnerAsync("owner-1");
+
+        Assert.Single(google.Upserts);
+        Assert.Empty(google.Deletes);
+        Assert.Equal(1, google.RefreshCalls);
+        Assert.Equal(2, persistedScope.GoogleCalendarConnections.Single().LastSyncedVersion);
+        Assert.Null(persistedScope.GoogleCalendarConnections.Single().SyncRequestedAt);
+    }
+
+    [Fact]
+    public async Task Automatic_sync_backfills_missing_legacy_content_hash_once()
+    {
+        await using var db = CreateDb();
+        db.Users.Add(new ApplicationUser { Id = "owner-1", UserName = "owner@example.test" });
+        db.Trips.Add(new TripDocumentRow
+        {
+            Id = Guid.NewGuid(), OwnerId = "owner-1", Version = 1,
+            Json = JsonSerializer.Serialize(SnapshotWithActivity("activity-1"), new JsonSerializerOptions(JsonSerializerDefaults.Web)),
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+        var google = new FakeGoogleCalendarClient();
+        var service = CreateService(db, google);
+        await service.CompleteAuthorizationAsync("owner-1", "google-subject-1", "refresh-secret", "access", DetourCalendarOptions.Scope);
+        await service.SyncOwnerAsync("owner-1");
+        Assert.Single(google.Upserts);
+
+        var managed = db.GoogleCalendarManagedEvents.Single();
+        managed.ContentHash = null;
+        var trip = db.Trips.Single();
+        trip.Version = 2;
+        var unrelatedChange = SnapshotWithActivity("activity-1");
+        unrelatedChange.Trip.Name = "Unrelated change for legacy row";
+        trip.Json = JsonSerializer.Serialize(unrelatedChange, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        await db.SaveChangesAsync();
+        await service.SyncOwnerAsync("owner-1");
+        Assert.Equal(2, google.Upserts.Count);
+        Assert.True(google.UpsertTracked[1]);
+        Assert.NotNull(db.GoogleCalendarManagedEvents.Single().ContentHash);
+
+        trip = db.Trips.Single();
+        trip.Version = 3;
+        unrelatedChange.Trip.Name = "Another unrelated change";
+        trip.Json = JsonSerializer.Serialize(unrelatedChange, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        await db.SaveChangesAsync();
+        await service.SyncOwnerAsync("owner-1");
+
+        Assert.Equal(2, google.Upserts.Count);
+        Assert.Equal(2, google.RefreshCalls);
+        Assert.Equal(3, db.GoogleCalendarConnections.Single().LastSyncedVersion);
+    }
+
+    [Fact]
+    public async Task Automatic_sync_updates_only_changed_event_and_deletes_stale_event()
+    {
+        await using var db = CreateDb();
+        db.Users.Add(new ApplicationUser { Id = "owner-1", UserName = "owner@example.test" });
+        var snapshot = SnapshotWithActivity("activity-changed");
+        snapshot.Activities.Add(new Activity
+        {
+            Id = "activity-unchanged", Title = "Museum", Date = new DateOnly(2026, 10, 5),
+            StartTime = new TimeOnly(10, 0), DurationMinutes = 90
+        });
+        snapshot.Activities.Add(new Activity
+        {
+            Id = "activity-removed", Title = "Old plan", Date = new DateOnly(2026, 10, 6),
+            StartTime = new TimeOnly(12, 0), DurationMinutes = 60
+        });
+        db.Trips.Add(new TripDocumentRow
+        {
+            Id = Guid.NewGuid(), OwnerId = "owner-1", Version = 1,
+            Json = JsonSerializer.Serialize(snapshot, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+        var google = new FakeGoogleCalendarClient();
+        var service = CreateService(db, google);
+        await service.CompleteAuthorizationAsync("owner-1", "google-subject-1", "refresh-secret", "access", DetourCalendarOptions.Scope);
+        await service.SyncOwnerAsync("owner-1");
+        var changedEventId = google.Upserts[0].EventId;
+        var unchangedEventId = google.Upserts[1].EventId;
+        var removedEventId = google.Upserts[2].EventId;
+
+        snapshot.Activities[0].Title = "Updated tea ceremony";
+        snapshot.Activities[0].Notes = "Bring the printed ticket";
+        snapshot.Activities.RemoveAt(2);
+        var trip = db.Trips.Single();
+        trip.Version = 2;
+        trip.Json = JsonSerializer.Serialize(snapshot, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        await db.SaveChangesAsync();
+
+        await service.SyncOwnerAsync("owner-1");
+
+        Assert.Equal(4, google.Upserts.Count);
+        Assert.Equal(changedEventId, google.Upserts[3].EventId);
+        Assert.True(google.UpsertTracked[3]);
+        Assert.Equal("Updated tea ceremony", google.Upserts[3].Body["summary"]!.GetValue<string>());
+        Assert.Contains("Bring the printed ticket", google.Upserts[3].Body["description"]!.GetValue<string>());
+        Assert.DoesNotContain(unchangedEventId, google.Upserts.Skip(3).Select(x => x.EventId));
+        Assert.Equal([removedEventId], google.Deletes);
+        Assert.Equal(2, db.GoogleCalendarConnections.Single().LastSyncedVersion);
+    }
+
+    [Fact]
+    public async Task Manual_sync_rewrites_unchanged_projection_to_repair_remote_event()
+    {
+        await using var db = CreateDb();
+        db.Users.Add(new ApplicationUser { Id = "owner-1", UserName = "owner@example.test" });
+        db.Trips.Add(new TripDocumentRow
+        {
+            Id = Guid.NewGuid(), OwnerId = "owner-1", Version = 1,
+            Json = JsonSerializer.Serialize(SnapshotWithActivity("activity-1"), new JsonSerializerOptions(JsonSerializerDefaults.Web)),
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+        var google = new FakeGoogleCalendarClient();
+        var service = CreateService(db, google);
+        await service.CompleteAuthorizationAsync("owner-1", "google-subject-1", "refresh-secret", "access", DetourCalendarOptions.Scope);
+        await service.SyncOwnerAsync("owner-1");
+        var eventId = Assert.Single(google.Upserts).EventId;
+        Assert.Contains(eventId, google.RemoteEventIds);
+
+        google.RemoteEventIds.Remove(eventId);
+        await service.RequestSyncAsync("owner-1");
+        await service.SyncOwnerAsync("owner-1");
+
+        Assert.Equal(2, google.Upserts.Count);
+        Assert.Equal(eventId, google.Upserts[1].EventId);
+        Assert.True(google.UpsertTracked[1]);
+        Assert.Contains(eventId, google.RemoteEventIds);
+        Assert.Equal(2, google.RefreshCalls);
+        Assert.Null(db.GoogleCalendarConnections.Single().SyncRequestedAt);
+    }
+
+    [Fact]
     public async Task Reconnect_with_a_different_google_subject_is_rejected_without_touching_events()
     {
         await using var db = CreateDb();
@@ -916,9 +1081,9 @@ public sealed class GoogleCalendarSyncTests
         ]
     };
 
-    private static TripDbContext CreateDb()
+    private static TripDbContext CreateDb(string? databaseName = null)
     {
-        var options = new DbContextOptionsBuilder<TripDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
+        var options = new DbContextOptionsBuilder<TripDbContext>().UseInMemoryDatabase(databaseName ?? Guid.NewGuid().ToString()).Options;
         return new TripDbContext(options);
     }
 

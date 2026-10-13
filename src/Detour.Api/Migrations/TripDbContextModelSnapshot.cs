@@ -160,6 +160,10 @@ namespace Detour.Api.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
+                    b.Property<string>("ContentHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<string>("GoogleEventId")
                         .IsRequired()
                         .HasMaxLength(1024)

@@ -149,12 +149,6 @@ public sealed class DetourCalendarService(
 
         try
         {
-            var refreshToken = tokenProtector.Unprotect(connection.EncryptedRefreshToken);
-            var accessToken = await google.RefreshAccessTokenAsync(refreshToken, cancellationToken);
-            if (string.IsNullOrWhiteSpace(connection.CalendarId))
-                accessToken = await WithRefreshedAccessAsync(accessToken, refreshToken,
-                    token => CreateCalendarOnceAsync(connection, token, cancellationToken), cancellationToken);
-
             var snapshot = JsonSerializer.Deserialize<TripSnapshot>(trip.Json, JsonOptions)
                 ?? throw new InvalidOperationException("The saved trip could not be read.");
             snapshot.Version = trip.Version;
@@ -162,33 +156,46 @@ public sealed class DetourCalendarService(
             var tracked = await db.GoogleCalendarManagedEvents
                 .Where(x => x.OwnerId == ownerId)
                 .ToDictionaryAsync(x => x.LocalKey, StringComparer.Ordinal, cancellationToken);
+            string? accessToken = null;
+            string? refreshToken = null;
+            async Task RunRemoteAsync(Func<string, Task> operation)
+            {
+                refreshToken ??= tokenProtector.Unprotect(connection.EncryptedRefreshToken);
+                accessToken ??= await google.RefreshAccessTokenAsync(refreshToken, cancellationToken);
+                accessToken = await WithRefreshedAccessAsync(accessToken, refreshToken, operation, cancellationToken);
+            }
+            if (string.IsNullOrWhiteSpace(connection.CalendarId))
+                await RunRemoteAsync(token => CreateCalendarOnceAsync(connection, token, cancellationToken));
 
             foreach (var (localKey, body) in projected)
             {
                 var eventId = StableEventId(localKey);
                 var hasManagedEvent = tracked.TryGetValue(localKey, out var managed);
                 var remoteTracked = hasManagedEvent && string.Equals(managed!.GoogleEventId, eventId, StringComparison.Ordinal);
-                accessToken = await WithRefreshedAccessAsync(accessToken, refreshToken,
-                    token => google.UpsertEventAsync(token, connection.CalendarId!, eventId, body, cancellationToken, tracked: remoteTracked), cancellationToken);
+                var contentHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(body.ToJsonString())));
+                if (remoteTracked && connection.SyncRequestedAt is null && managed!.ContentHash == contentHash)
+                    continue;
+                await RunRemoteAsync(token => google.UpsertEventAsync(token, connection.CalendarId!, eventId, body, cancellationToken, tracked: remoteTracked));
                 if (!hasManagedEvent)
                 {
                     db.GoogleCalendarManagedEvents.Add(new GoogleCalendarManagedEventRow
                     {
                         OwnerId = ownerId,
                         LocalKey = localKey,
-                        GoogleEventId = eventId
+                        GoogleEventId = eventId,
+                        ContentHash = contentHash
                     });
                 }
-                else if (!string.Equals(managed!.GoogleEventId, eventId, StringComparison.Ordinal))
+                else
                 {
-                    managed.GoogleEventId = eventId;
+                    managed!.GoogleEventId = eventId;
+                    managed.ContentHash = contentHash;
                 }
             }
 
             foreach (var stale in tracked.Values.Where(x => !projected.ContainsKey(x.LocalKey)))
             {
-                accessToken = await WithRefreshedAccessAsync(accessToken, refreshToken,
-                    token => google.DeleteEventAsync(token, connection.CalendarId!, stale.GoogleEventId, cancellationToken), cancellationToken);
+                await RunRemoteAsync(token => google.DeleteEventAsync(token, connection.CalendarId!, stale.GoogleEventId, cancellationToken));
                 db.GoogleCalendarManagedEvents.Remove(stale);
             }
 
