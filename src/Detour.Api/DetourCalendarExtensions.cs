@@ -105,12 +105,23 @@ public static class DetourCalendarExtensions
             await calendar.DisconnectAsync(owner.OwnerId, ct);
             return Results.Ok(await calendar.GetStatusAsync(owner.OwnerId, ct));
         });
+        // Google handles callbacks before endpoint execution. The mapped fallback
+        // supplies rate-limit metadata to the middleware that runs before authentication.
+        app.Map("/signin-google-calendar", (HttpContext context) =>
+        {
+            context.Response.StatusCode = StatusCodes.Status400BadRequest;
+            return context.Response.WriteAsJsonAsync(new { error = "invalid_calendar_callback" });
+        }).RequireRateLimiting(ApiRateLimits.OAuthRequestPolicy);
 
         if (!app.Configuration.GetValue<bool>("Auth:AllowLocalDev")) status.RequireAuthorization("calendar-browser");
         connect.RequireAuthorization("calendar-browser");
         begin.RequireAuthorization("calendar-browser");
         sync.RequireAuthorization("calendar-browser");
         disconnect.RequireAuthorization("calendar-browser");
+        connect.RequireRateLimiting(ApiRateLimits.OwnerConcurrencyPolicy);
+        sync.RequireRateLimiting(ApiRateLimits.OwnerConcurrencyPolicy);
+        disconnect.RequireRateLimiting(ApiRateLimits.OwnerConcurrencyPolicy);
+        begin.RequireRateLimiting(ApiRateLimits.OAuthRequestPolicy);
     }
 
     internal static GoogleChallengeProperties CreateChallengeProperties(string ownerId)

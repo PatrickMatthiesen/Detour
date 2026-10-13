@@ -29,6 +29,8 @@ The per-owner synchronization lock is process-local. The current self-hosted dep
 
 ## API
 
+Calendar API requests share the per-owner request budget. Connection changes and sync retries also use the owner concurrency limit. Calendar authorization and callback requests use the OAuth request limit before authentication.
+
 All calendar routes use the browser's Detour session. Bearer tokens cannot connect, retry, or disconnect the integration. Cookie-authenticated mutations also require the normal `X-CSRF-TOKEN` header.
 
 - `GET /api/calendar` returns configuration, connection, last-sync, and error state.

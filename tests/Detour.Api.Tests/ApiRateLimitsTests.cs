@@ -4,6 +4,9 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.Extensions.DependencyInjection;
 using Detour.Api;
 
 namespace Detour.Api.Tests;
@@ -70,6 +73,69 @@ public sealed class ApiRateLimitsTests
         foreach (var response in streams) response.Dispose();
     }
 
+    [Fact]
+    public async Task Calendar_owner_budget_is_shared_across_methods_and_partitioned_by_owner()
+    {
+        await using var app = CreateCalendarApp(ownerBurst: 2, oauthBurst: 20);
+        await app.StartAsync();
+        using var client = app.GetTestClient();
+
+        using var status = await client.GetAsync("/api/calendar?owner=owner-a");
+        using var sync = await client.PostAsync("/api/calendar/sync?owner=owner-a", null);
+        using var limitedDisconnect = await client.DeleteAsync("/api/calendar?owner=owner-a");
+        using var otherOwner = await client.GetAsync("/api/calendar?owner=owner-b");
+
+        Assert.Equal(HttpStatusCode.OK, status.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, sync.StatusCode);
+        Assert.Equal(HttpStatusCode.TooManyRequests, limitedDisconnect.StatusCode);
+        Assert.False(limitedDisconnect.Headers.Contains("WWW-Authenticate"));
+        Assert.Equal(HttpStatusCode.OK, otherOwner.StatusCode);
+    }
+
+    [Fact]
+    public async Task Calendar_expensive_operations_reject_overlap_per_owner()
+    {
+        var gate = new RequestGate(1);
+        await using var app = CreateCalendarApp(ownerBurst: 20, oauthBurst: 20, concurrency: 1, syncGate: gate);
+        await app.StartAsync();
+        using var client = app.GetTestClient();
+
+        var firstSync = client.PostAsync("/api/calendar/sync?owner=owner-a", null);
+        try
+        {
+            await gate.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            using var rejectedDisconnect = await client.DeleteAsync("/api/calendar?owner=owner-a");
+            using var otherOwner = await client.DeleteAsync("/api/calendar?owner=owner-b");
+            Assert.Equal(HttpStatusCode.TooManyRequests, rejectedDisconnect.StatusCode);
+            Assert.False(rejectedDisconnect.Headers.Contains("WWW-Authenticate"));
+            Assert.Equal(HttpStatusCode.OK, otherOwner.StatusCode);
+        }
+        finally
+        {
+            gate.Release.TrySetResult();
+        }
+
+        using var completed = await firstSync;
+        Assert.Equal(HttpStatusCode.OK, completed.StatusCode);
+    }
+
+    [Fact]
+    public async Task Calendar_authorization_and_callback_methods_share_oauth_budget_before_callback_handler()
+    {
+        await using var app = CreateCalendarApp(ownerBurst: 20, oauthBurst: 2);
+        await app.StartAsync();
+        using var client = app.GetTestClient();
+
+        using var authorization = await client.GetAsync("/auth/calendar/connect");
+        using var callbackGet = await client.GetAsync("/signin-google-calendar");
+        using var callbackPost = await client.PostAsync("/signin-google-calendar", null);
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, authorization.StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, callbackGet.StatusCode);
+        Assert.Equal(HttpStatusCode.TooManyRequests, callbackPost.StatusCode);
+        Assert.False(callbackPost.Headers.Contains("WWW-Authenticate"));
+    }
+
     private static WebApplication CreateApp(int ownerBurst, int oauthBurst, int concurrency = 2, RequestGate? expensiveGate = null, RequestGate? streamGate = null)
     {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Development" });
@@ -111,6 +177,66 @@ public sealed class ApiRateLimitsTests
                 return Results.Ok();
             }).RequireRateLimiting(ApiRateLimits.OwnerConcurrencyPolicy);
         return app;
+    }
+
+    private static WebApplication CreateCalendarApp(int ownerBurst, int oauthBurst, int concurrency = 2, RequestGate? syncGate = null)
+    {
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Development" });
+        builder.WebHost.UseTestServer();
+        builder.Configuration["ApiRateLimits:OwnerRequestsPerMinute"] = "100";
+        builder.Configuration["ApiRateLimits:OwnerBurst"] = ownerBurst.ToString();
+        builder.Configuration["ApiRateLimits:OAuthRequestsPerMinute"] = "100";
+        builder.Configuration["ApiRateLimits:OAuthBurst"] = oauthBurst.ToString();
+        builder.Configuration["ApiRateLimits:OwnerConcurrentExpensiveRequests"] = concurrency.ToString();
+        builder.Services.AddHttpContextAccessor();
+        builder.Services.AddAuthentication();
+        builder.Services.AddAuthorization(options => options.AddPolicy("calendar-browser", policy => policy.RequireAuthenticatedUser()));
+        builder.Services.AddScoped<OwnerAccessor>();
+        builder.Services.AddDbContext<TripDbContext>(options => options.UseInMemoryDatabase("calendar-rate-limits-" + Guid.NewGuid()));
+        builder.Services.AddDataProtection();
+        builder.Services.AddSingleton(new DetourCalendarOptions());
+        builder.Services.AddSingleton<CalendarOwnerLock>();
+        builder.Services.AddSingleton<IGoogleCalendarClient, EmptyGoogleCalendarClient>();
+        builder.Services.AddScoped<DetourCalendarService>();
+        ApiRateLimits.Add(builder.Services, builder.Configuration);
+
+        var app = builder.Build();
+        app.UseWhen(ApiRateLimits.IsOAuthRequest, branch => branch.UseRateLimiter());
+        app.Use(async (context, next) =>
+        {
+            var owner = context.Request.Query["owner"].FirstOrDefault() ?? "owner-a";
+            context.User = new ClaimsPrincipal(new ClaimsIdentity([new Claim("sub", owner)], "test"));
+            if (context.Request.Path.Equals("/signin-google-calendar", StringComparison.OrdinalIgnoreCase))
+            {
+                context.Response.StatusCode = StatusCodes.Status204NoContent;
+                return;
+            }
+            await next();
+        });
+        app.UseWhen(context => !ApiRateLimits.IsOAuthRequest(context), branch => branch.UseRateLimiter());
+        if (syncGate is not null)
+            app.Use(async (context, next) =>
+            {
+                if (context.Request.Path.Equals("/api/calendar/sync", StringComparison.OrdinalIgnoreCase)
+                    && HttpMethods.IsPost(context.Request.Method))
+                {
+                    syncGate.Enter();
+                    await syncGate.Release.Task.WaitAsync(context.RequestAborted);
+                }
+                await next();
+            });
+        app.UseAuthentication();
+        app.UseAuthorization();
+        app.MapDetourCalendar();
+        return app;
+    }
+
+    private sealed class EmptyGoogleCalendarClient : IGoogleCalendarClient
+    {
+        public Task<string> RefreshAccessTokenAsync(string refreshToken, CancellationToken cancellationToken) => Task.FromResult("");
+        public Task<string> CreateCalendarAsync(string accessToken, CancellationToken cancellationToken) => Task.FromResult("");
+        public Task UpsertEventAsync(string accessToken, string calendarId, string eventId, System.Text.Json.Nodes.JsonObject body, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task DeleteEventAsync(string accessToken, string calendarId, string eventId, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     private sealed class RequestGate(int expectedEntries)
