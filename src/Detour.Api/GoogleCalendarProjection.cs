@@ -43,7 +43,7 @@ public static class GoogleCalendarProjection
             // Confirmation codes, booking numbers and PINs are deliberately not copied.
             if (booking.Start is { } start)
             {
-                Timed(body, start, booking.End is { } end && end > start ? end : null, zone);
+                Timed(body, start, booking.End, zone);
             }
             else if (booking.CheckIn is { } checkIn)
             {
@@ -105,6 +105,8 @@ public static class GoogleCalendarProjection
 
     private static void Timed(JsonObject body, DateTimeOffset start, DateTimeOffset? end, string zone)
     {
+        if (end is { } explicitEnd && explicitEnd <= start)
+            throw new ArgumentException("A timed calendar booking must end after its start time.");
         body["start"] = new JsonObject { ["dateTime"] = start.ToString("yyyy-MM-dd'T'HH:mm:sszzz", CultureInfo.InvariantCulture), ["timeZone"] = zone };
         body["end"] = new JsonObject { ["dateTime"] = (end ?? start.AddMinutes(1)).ToString("yyyy-MM-dd'T'HH:mm:sszzz", CultureInfo.InvariantCulture), ["timeZone"] = zone };
         if (end is null)

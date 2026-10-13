@@ -88,6 +88,31 @@ public sealed class GoogleCalendarProjectionTests
         Assert.Equal("2026-10-09", body["end"]!["date"]!.GetValue<string>());
     }
 
+    [Theory]
+    [InlineData("2026-10-08T12:00:00+09:00")]
+    [InlineData("2026-10-08T11:59:00+09:00")]
+    [InlineData("2026-10-08T03:00:00+00:00")]
+    public void Explicit_non_later_timed_booking_end_is_rejected(string end)
+    {
+        var snapshot = new TripSnapshot
+        {
+            Bookings = [new Booking { Id = "flight", Start = DateTimeOffset.Parse("2026-10-08T12:00:00+09:00"), End = DateTimeOffset.Parse(end) }]
+        };
+        Assert.Throws<ArgumentException>(() => GoogleCalendarProjection.Build(snapshot));
+    }
+
+    [Fact]
+    public void Timed_booking_without_end_remains_an_explicit_unknown_duration_marker()
+    {
+        var snapshot = new TripSnapshot
+        {
+            Bookings = [new Booking { Id = "flight", Start = DateTimeOffset.Parse("2026-10-08T12:00:00+09:00") }]
+        };
+        var body = GoogleCalendarProjection.Build(snapshot)["booking:flight"];
+        Assert.Equal("2026-10-08T12:01:00+09:00", body["end"]!["dateTime"]!.GetValue<string>());
+        Assert.Contains("Duration unknown", body["description"]!.GetValue<string>());
+    }
+
     [Fact]
     public void Stay_is_suppressed_only_by_a_matching_active_accommodation_interval()
     {
