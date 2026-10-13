@@ -28,7 +28,7 @@ public interface IGoogleCalendarClient
 {
     Task<string> RefreshAccessTokenAsync(string refreshToken, CancellationToken cancellationToken);
     Task<string> CreateCalendarAsync(string accessToken, CancellationToken cancellationToken);
-    Task UpsertEventAsync(string accessToken, string calendarId, string eventId, JsonObject body, CancellationToken cancellationToken);
+    Task UpsertEventAsync(string accessToken, string calendarId, string eventId, JsonObject body, CancellationToken cancellationToken, bool tracked = false);
     Task DeleteEventAsync(string accessToken, string calendarId, string eventId, CancellationToken cancellationToken);
 }
 
@@ -54,10 +54,12 @@ public sealed class GoogleCalendarClient(IHttpClientFactory clients, DetourCalen
             };
             return request;
         }, cancellationToken);
-        if (response.StatusCode == HttpStatusCode.BadRequest)
+        if (!response.IsSuccessStatusCode)
         {
             var error = await ReadErrorCodeAsync(response, cancellationToken);
-            if (error is "invalid_grant" or "invalid_client")
+            if (error is "invalid_client")
+                throw new CalendarRemoteException("Google Calendar OAuth client configuration is invalid. The deployment credentials need correction; Detour will retry automatically.", transient: true);
+            if (error is "invalid_grant")
                 throw new CalendarReauthorizationException("Google Calendar access expired. Reconnect Google Calendar in Detour.");
         }
         await EnsureSuccessAsync(response, "refresh Google Calendar access", cancellationToken);
@@ -103,11 +105,24 @@ public sealed class GoogleCalendarClient(IHttpClientFactory clients, DetourCalen
         }
     }
 
-    public async Task UpsertEventAsync(string accessToken, string calendarId, string eventId, JsonObject body, CancellationToken cancellationToken)
+    public async Task UpsertEventAsync(string accessToken, string calendarId, string eventId, JsonObject body, CancellationToken cancellationToken, bool tracked = false)
     {
+        var calendar = Uri.EscapeDataString(calendarId);
+        if (tracked)
+        {
+            using var update = await SendWithRetryAsync(() => Authorized(
+                HttpMethod.Put,
+                $"{ApiBase}/calendars/{calendar}/events/{Uri.EscapeDataString(eventId)}",
+                accessToken,
+                (JsonObject)body.DeepClone()), cancellationToken);
+            if (update.StatusCode is not (HttpStatusCode.NotFound or HttpStatusCode.Gone))
+            {
+                await EnsureSuccessAsync(update, "update a Detour calendar event", cancellationToken);
+                return;
+            }
+        }
         var insert = (JsonObject)body.DeepClone();
         insert["id"] = eventId;
-        var calendar = Uri.EscapeDataString(calendarId);
         using var response = await SendWithRetryAsync(() => Authorized(
             HttpMethod.Post,
             $"{ApiBase}/calendars/{calendar}/events",

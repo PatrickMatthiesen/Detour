@@ -160,8 +160,10 @@ public sealed class DetourCalendarService(
             foreach (var (localKey, body) in projected)
             {
                 var eventId = StableEventId(localKey);
-                await google.UpsertEventAsync(accessToken, connection.CalendarId!, eventId, body, cancellationToken);
-                if (!tracked.TryGetValue(localKey, out var managed))
+                var hasManagedEvent = tracked.TryGetValue(localKey, out var managed);
+                var remoteTracked = hasManagedEvent && string.Equals(managed!.GoogleEventId, eventId, StringComparison.Ordinal);
+                await google.UpsertEventAsync(accessToken, connection.CalendarId!, eventId, body, cancellationToken, tracked: remoteTracked);
+                if (!hasManagedEvent)
                 {
                     db.GoogleCalendarManagedEvents.Add(new GoogleCalendarManagedEventRow
                     {
@@ -170,7 +172,7 @@ public sealed class DetourCalendarService(
                         GoogleEventId = eventId
                     });
                 }
-                else if (!string.Equals(managed.GoogleEventId, eventId, StringComparison.Ordinal))
+                else if (!string.Equals(managed!.GoogleEventId, eventId, StringComparison.Ordinal))
                 {
                     managed.GoogleEventId = eventId;
                 }

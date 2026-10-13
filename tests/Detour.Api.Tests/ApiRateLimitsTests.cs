@@ -235,7 +235,7 @@ public sealed class ApiRateLimitsTests
     {
         public Task<string> RefreshAccessTokenAsync(string refreshToken, CancellationToken cancellationToken) => Task.FromResult("");
         public Task<string> CreateCalendarAsync(string accessToken, CancellationToken cancellationToken) => Task.FromResult("");
-        public Task UpsertEventAsync(string accessToken, string calendarId, string eventId, System.Text.Json.Nodes.JsonObject body, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task UpsertEventAsync(string accessToken, string calendarId, string eventId, System.Text.Json.Nodes.JsonObject body, CancellationToken cancellationToken, bool tracked = false) => Task.CompletedTask;
         public Task DeleteEventAsync(string accessToken, string calendarId, string eventId, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
