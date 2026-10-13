@@ -228,7 +228,7 @@
   border-bottom: 1px solid #edf0ea;
   display: grid;
   gap: 8px;
-  grid-template-columns: 24px minmax(0, 1fr) 93px 86px 28px;
+  grid-template-columns: 24px minmax(0, 1fr) 93px 86px 28px 28px;
   min-height: 66px;
   padding: 8px 0;
 }
@@ -236,12 +236,38 @@
 .plan-activity-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .plan-activity-main strong { font-size: 12px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .plan-activity-main span { color: var(--plan-muted); font-size: 9px; }
+.plan-activity-main .plan-activity-notes { color: var(--plan-muted); font-size: 10px; overflow-wrap: anywhere; }
+.plan-activity-maps { align-items: center; color: var(--plan-blue); display: inline-flex; font-size: 10px; gap: 4px; text-decoration: none; }
+.plan-activity-maps:hover { text-decoration: underline; }
 .plan-field { display: flex; flex-direction: column; gap: 3px; }
 .plan-field > span { color: var(--plan-faint); font-size: 8px; }
 .plan-field input { background: #fff; border: 1px solid var(--plan-line); border-radius: 4px; color: var(--plan-ink); font-size: 10px; min-width: 0; padding: 6px; width: 100%; }
 .plan-field input::placeholder { color: var(--plan-faint); }
 .plan-remove { border: 0; color: #a8b0aa; height: 27px; width: 27px; }
-.plan-remove:hover { color:var(--color-vermilion-ink); }
+.plan-remove:hover { color: var(--color-vermilion-ink); }
+.plan-edit-activity { border: 0; color: var(--plan-muted); height: 27px; width: 27px; }
+.plan-edit-activity:hover { color: var(--plan-coral); }
+.plan-add-event { align-items: center; display: inline-flex; gap: 6px; margin-top: 9px; padding: 7px 9px; border: 1px solid var(--plan-line); border-radius: 5px; background: transparent; color: var(--plan-coral); font-size: 11px; }
+.plan-add-event:hover { background: var(--plan-coral-soft); }
+.plan-mymaps-export { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 8px 0 11px; }
+.plan-mymaps-export button { border: 1px solid var(--plan-line); border-radius: 4px; padding: 6px 8px; background: transparent; color: var(--plan-blue); font-size: 10px; }
+.plan-mymaps-export button:hover { border-color: var(--plan-blue); }
+.plan-mymaps-export small { flex-basis: 100%; color: var(--plan-muted); font-size: 10px; line-height: 1.4; }
+.plan-google-calendar { align-items: center; display: flex; flex-wrap: wrap; gap: 10px 16px; margin: 11px auto 0; max-width: 1270px; padding: 8px 10px; border: 1px solid var(--plan-line); border-radius: 6px; background: #fffefa; }
+.plan-google-calendar-copy { align-items: center; display: flex; flex: 1 1 245px; gap: 9px; min-width: 0; }
+.plan-google-calendar-icon { align-items: center; display: inline-flex; justify-content: center; width: 29px; height: 29px; flex: none; border-radius: 5px; background: var(--plan-blue-soft); color: var(--plan-blue); }
+.plan-google-calendar-copy > span:last-child { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.plan-google-calendar-copy strong { font-size: 11px; }
+.plan-google-calendar-copy small, .plan-google-calendar-sync { color: var(--plan-muted); font-size: 10px; line-height: 1.4; }
+.plan-google-calendar-actions { align-items: center; display: flex; flex-wrap: wrap; gap: 6px; }
+.plan-google-calendar-actions button, .plan-google-calendar-error button { align-items: center; display: inline-flex; gap: 5px; border: 1px solid var(--plan-line); border-radius: 4px; padding: 6px 8px; background: #fff; color: var(--plan-ink); font-size: 10px; }
+.plan-google-calendar-actions button:hover:not(:disabled), .plan-google-calendar-error button:hover:not(:disabled) { border-color: var(--plan-coral); color: var(--plan-coral); }
+.plan-google-calendar-actions button:disabled { cursor: default; opacity: .55; }
+.plan-google-calendar-error { flex-basis: 100%; color: #9b392d; font-size: 11px; line-height: 1.45; }
+.plan-google-calendar-error button { margin-left: 5px; }
+.plan-google-calendar-sync { flex-basis: 100%; }
+.plan-calendar-spinner { animation: plan-spin .9s linear infinite; color: var(--plan-muted); }
+@keyframes plan-spin { to { transform: rotate(360deg); } }
 
 .plan-empty { color: var(--plan-muted); font-size: 11px; padding: 9px 0 13px; }
 .plan-capacity-note { align-items: start; color: var(--plan-faint); display: flex; font-size: 9px; gap: 5px; line-height: 1.45; padding-top: 12px; }
@@ -294,10 +320,11 @@
   .plan-day-heading { display: block; }
   .plan-capacity { border-left: 0; border-top: 1px solid #c9dccb; margin-top: 14px; padding: 8px 0 0; text-align: left; }
   .plan-capacity span { max-width: none; }
-  .plan-activity-row { gap: 6px; grid-template-columns: 22px minmax(0, 1fr) 78px 28px; }
+  .plan-activity-row { gap: 6px; grid-template-columns: 22px minmax(0, 1fr) 72px 28px 28px; }
   .plan-duration-field { grid-column: 3; grid-row: 2; }
   .plan-time-field { grid-column: 3; grid-row: 1; }
-  .plan-remove { grid-column: 4; grid-row: 1 / span 2; }
+  .plan-edit-activity { grid-column: 4; grid-row: 1; }
+  .plan-remove { grid-column: 5; grid-row: 1 / span 2; }
   .plan-place-list { display: flex; }
   .plan-place-row { grid-template-columns: 88px minmax(0, 1fr); }
   .plan-place-photo { height: 86px; width: 88px; }

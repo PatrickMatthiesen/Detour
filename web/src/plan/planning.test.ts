@@ -79,6 +79,25 @@ describe("daySummary", () => {
     });
   });
 
+  it("keeps operational entries from inheriting a linked place visit duration and times journeys when supplied", () => {
+    const state = snapshot({
+      places: [{ id: "hotel", name: "Hotel", city: "Kyoto", durationMinutes: 90 }],
+      activities: [
+        { id: "checkout", placeId: "hotel", title: "Hotel checkout", kind: "check-out", date: "2026-10-02" },
+        { id: "visit", placeId: null, title: "Museum visit", date: "2026-10-02", startTime: "09:00", durationMinutes: 30 },
+      ],
+      travelLegs: [{ id: "train", from: "Kyoto", to: "Osaka", date: "2026-10-02", startTime: "09:00", durationMinutes: 30 }],
+    });
+
+    expect(daySummary(state, "2026-10-02")).toMatchObject({
+      knownMinutes: 30,
+      unknownDurations: 1,
+      unknownItems: ["Hotel checkout"],
+      overlaps: true,
+      conflicts: ["Museum visit", "Kyoto → Osaka"],
+    });
+  });
+
   it("maps timestamp bookings into the trip timezone while preserving date-only fields", () => {
     const state = snapshot({
       bookings: [

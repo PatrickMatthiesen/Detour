@@ -70,6 +70,8 @@ public static class ApiRateLimits
         return path.Equals("/auth/login", StringComparison.OrdinalIgnoreCase)
             || path.Equals("/auth/callback", StringComparison.OrdinalIgnoreCase)
             || path.Equals("/signin-google", StringComparison.OrdinalIgnoreCase)
+            || path.Equals("/auth/calendar/connect", StringComparison.OrdinalIgnoreCase)
+            || path.Equals("/signin-google-calendar", StringComparison.OrdinalIgnoreCase)
             || path.Equals("/connect/authorize", StringComparison.OrdinalIgnoreCase)
             || path.Equals("/connect/token", StringComparison.OrdinalIgnoreCase);
     }
@@ -78,6 +80,7 @@ public static class ApiRateLimits
     {
         var path = context.Request.Path;
         return path.Equals("/api/trip", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWithSegments("/api/calendar", StringComparison.OrdinalIgnoreCase)
             || path.StartsWithSegments("/api/places", StringComparison.OrdinalIgnoreCase)
             || path.StartsWithSegments("/mcp", StringComparison.OrdinalIgnoreCase);
     }
