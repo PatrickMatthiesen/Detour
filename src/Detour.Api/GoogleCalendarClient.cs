@@ -18,11 +18,14 @@ public sealed class DetourCalendarOptions
 }
 
 public sealed class CalendarReauthorizationException(string message) : Exception(message);
-public sealed class CalendarRemoteException(string message, bool transient = false, bool outcomeUncertain = false) : Exception(message)
+public class CalendarRemoteException(string message, bool transient = false, bool outcomeUncertain = false) : Exception(message)
 {
     public bool Transient { get; } = transient;
     public bool OutcomeUncertain { get; } = outcomeUncertain;
 }
+
+public sealed class CalendarAccessTokenExpiredException()
+    : CalendarRemoteException("Google Calendar rejected the access token. Detour will refresh access and retry.", transient: true);
 
 public interface IGoogleCalendarClient
 {
@@ -62,7 +65,7 @@ public sealed class GoogleCalendarClient(IHttpClientFactory clients, DetourCalen
             if (error is "invalid_grant")
                 throw new CalendarReauthorizationException("Google Calendar access expired. Reconnect Google Calendar in Detour.");
         }
-        await EnsureSuccessAsync(response, "refresh Google Calendar access", cancellationToken);
+        await EnsureSuccessAsync(response, "refresh Google Calendar access", cancellationToken, tokenRequest: true);
         var payload = await response.Content.ReadFromJsonAsync<JsonObject>(JsonOptions, cancellationToken);
         var token = payload?["access_token"]?.GetValue<string>();
         return !string.IsNullOrWhiteSpace(token)
@@ -188,11 +191,15 @@ public sealed class GoogleCalendarClient(IHttpClientFactory clients, DetourCalen
         return request;
     }
 
-    private static async Task EnsureSuccessAsync(HttpResponseMessage response, string action, CancellationToken cancellationToken, bool creationRequest = false)
+    private static async Task EnsureSuccessAsync(HttpResponseMessage response, string action, CancellationToken cancellationToken, bool creationRequest = false, bool tokenRequest = false)
     {
         if (response.IsSuccessStatusCode) return;
         if (response.StatusCode == HttpStatusCode.Unauthorized)
-            throw new CalendarReauthorizationException("Google Calendar access expired. Reconnect Google Calendar in Detour.");
+        {
+            if (tokenRequest)
+                throw new CalendarReauthorizationException("Google Calendar access expired. Reconnect Google Calendar in Detour.");
+            throw new CalendarAccessTokenExpiredException();
+        }
         var code = await ReadErrorCodeAsync(response, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Forbidden && code is "insufficientPermissions" or "insufficient_scope")
             throw new CalendarReauthorizationException("Google Calendar permission is missing. Reconnect and approve calendar access.");

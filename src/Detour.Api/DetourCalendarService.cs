@@ -91,7 +91,11 @@ public sealed class DetourCalendarService(
         await db.SaveChangesAsync(cancellationToken);
         if (string.IsNullOrWhiteSpace(row.CalendarId))
         {
-            try { await CreateCalendarOnceAsync(row, accessToken, cancellationToken); }
+            try
+            {
+                await WithRefreshedAccessAsync(accessToken, refreshToken,
+                    token => CreateCalendarOnceAsync(row, token, cancellationToken), cancellationToken);
+            }
             catch (CalendarRemoteException ex)
             {
                 await RecordRemoteFailureAsync(row, ex, cancellationToken);
@@ -147,7 +151,8 @@ public sealed class DetourCalendarService(
             var refreshToken = tokenProtector.Unprotect(connection.EncryptedRefreshToken);
             var accessToken = await google.RefreshAccessTokenAsync(refreshToken, cancellationToken);
             if (string.IsNullOrWhiteSpace(connection.CalendarId))
-                await CreateCalendarOnceAsync(connection, accessToken, cancellationToken);
+                accessToken = await WithRefreshedAccessAsync(accessToken, refreshToken,
+                    token => CreateCalendarOnceAsync(connection, token, cancellationToken), cancellationToken);
 
             var snapshot = JsonSerializer.Deserialize<TripSnapshot>(trip.Json, JsonOptions)
                 ?? throw new InvalidOperationException("The saved trip could not be read.");
@@ -162,7 +167,8 @@ public sealed class DetourCalendarService(
                 var eventId = StableEventId(localKey);
                 var hasManagedEvent = tracked.TryGetValue(localKey, out var managed);
                 var remoteTracked = hasManagedEvent && string.Equals(managed!.GoogleEventId, eventId, StringComparison.Ordinal);
-                await google.UpsertEventAsync(accessToken, connection.CalendarId!, eventId, body, cancellationToken, tracked: remoteTracked);
+                accessToken = await WithRefreshedAccessAsync(accessToken, refreshToken,
+                    token => google.UpsertEventAsync(token, connection.CalendarId!, eventId, body, cancellationToken, tracked: remoteTracked), cancellationToken);
                 if (!hasManagedEvent)
                 {
                     db.GoogleCalendarManagedEvents.Add(new GoogleCalendarManagedEventRow
@@ -180,7 +186,8 @@ public sealed class DetourCalendarService(
 
             foreach (var stale in tracked.Values.Where(x => !projected.ContainsKey(x.LocalKey)))
             {
-                await google.DeleteEventAsync(accessToken, connection.CalendarId!, stale.GoogleEventId, cancellationToken);
+                accessToken = await WithRefreshedAccessAsync(accessToken, refreshToken,
+                    token => google.DeleteEventAsync(token, connection.CalendarId!, stale.GoogleEventId, cancellationToken), cancellationToken);
                 db.GoogleCalendarManagedEvents.Remove(stale);
             }
 
@@ -219,6 +226,18 @@ public sealed class DetourCalendarService(
         {
             await RecordFailureAsync(connection, $"Calendar sync failed: {ex.Message}", false, false, cancellationToken);
         }
+    }
+
+    private async Task<string> WithRefreshedAccessAsync(string accessToken, string refreshToken, Func<string, Task> operation, CancellationToken cancellationToken)
+    {
+        try { await operation(accessToken); }
+        catch (CalendarAccessTokenExpiredException)
+        {
+            accessToken = await google.RefreshAccessTokenAsync(refreshToken, cancellationToken);
+            // Retry this operation once. A second API rejection follows normal backoff.
+            await operation(accessToken);
+        }
+        return accessToken;
     }
 
     private Task RecordRemoteFailureAsync(GoogleCalendarConnectionRow connection, CalendarRemoteException error, CancellationToken cancellationToken)

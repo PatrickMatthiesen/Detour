@@ -224,6 +224,196 @@ public sealed class GoogleCalendarSyncTests
     }
 
     [Fact]
+    public async Task Google_api_401_is_reported_as_an_expired_access_token()
+    {
+        var handler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.Unauthorized));
+        var client = new GoogleCalendarClient(new StaticHttpClientFactory(handler),
+            new DetourCalendarOptions { ClientId = "client", ClientSecret = "secret" });
+
+        var error = await Assert.ThrowsAsync<CalendarAccessTokenExpiredException>(() =>
+            client.UpsertEventAsync("expired", "calendar", "event-id", new JsonObject(), CancellationToken.None));
+
+        Assert.IsAssignableFrom<CalendarRemoteException>(error);
+        Assert.True(error.Transient);
+        Assert.Single(handler.Requests);
+    }
+
+    [Fact]
+    public async Task Sync_refreshes_after_api_401_and_retries_the_same_upsert_and_delete()
+    {
+        await using var db = CreateDb();
+        db.Users.Add(new ApplicationUser { Id = "owner-1", UserName = "owner@example.test" });
+        db.Trips.Add(new TripDocumentRow
+        {
+            Id = Guid.NewGuid(), OwnerId = "owner-1", Version = 1,
+            Json = JsonSerializer.Serialize(SnapshotWithActivity("activity-1"), new JsonSerializerOptions(JsonSerializerDefaults.Web)),
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+        var tokenAttempts = 0;
+        var upsertAttempts = 0;
+        var deleteAttempts = 0;
+        var handler = new RecordingHandler(request =>
+        {
+            var path = request.RequestUri!.AbsolutePath;
+            if (path == "/token")
+            {
+                tokenAttempts++;
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent($"{{\"access_token\":\"access-{tokenAttempts}\"}}", System.Text.Encoding.UTF8, "application/json")
+                };
+            }
+            if (path.EndsWith("/calendars", StringComparison.Ordinal))
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("{\"id\":\"calendar-id\"}", System.Text.Encoding.UTF8, "application/json")
+                };
+            if (request.Method == HttpMethod.Delete)
+                return ++deleteAttempts == 1
+                    ? new HttpResponseMessage(HttpStatusCode.Unauthorized)
+                    : new HttpResponseMessage(HttpStatusCode.NoContent);
+            if (path.Contains("/events", StringComparison.Ordinal))
+                return ++upsertAttempts == 1
+                    ? new HttpResponseMessage(HttpStatusCode.Unauthorized)
+                    : new HttpResponseMessage(HttpStatusCode.OK);
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        });
+        var options = new DetourCalendarOptions { ClientId = "client", ClientSecret = "secret" };
+        var google = new GoogleCalendarClient(new StaticHttpClientFactory(handler), options);
+        var service = new DetourCalendarService(db, new CalendarOwnerLock(), new EphemeralDataProtectionProvider(), google, options);
+        await service.CompleteAuthorizationAsync("owner-1", "google-subject-1", "refresh-secret", "initial-access", DetourCalendarOptions.Scope);
+
+        await service.SyncOwnerAsync("owner-1");
+        var trip = db.Trips.Single();
+        trip.Version = 2;
+        trip.Json = JsonSerializer.Serialize(new TripSnapshot { Trip = new TripDocument { TimeZone = "Asia/Tokyo" } }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        await db.SaveChangesAsync();
+        await service.SyncOwnerAsync("owner-1");
+
+        var eventRequests = handler.Requests.Where(x => x.Url.Contains("/events", StringComparison.Ordinal)).ToArray();
+        Assert.Equal(4, tokenAttempts);
+        Assert.Equal(2, upsertAttempts);
+        Assert.Equal(2, deleteAttempts);
+        Assert.Equal([HttpMethod.Post, HttpMethod.Post, HttpMethod.Delete, HttpMethod.Delete], eventRequests.Select(x => x.Method));
+        Assert.Equal(["access-1", "access-2", "access-3", "access-4"], eventRequests.Select(x => x.AuthorizationParameter));
+        Assert.Empty(db.GoogleCalendarManagedEvents);
+        Assert.Equal(2, db.GoogleCalendarConnections.Single().LastSyncedVersion);
+        Assert.False(db.GoogleCalendarConnections.Single().ReauthorizationRequired);
+    }
+
+    [Fact]
+    public async Task Calendar_creation_refreshes_after_api_401_and_retries_creation_once()
+    {
+        await using var db = CreateDb();
+        db.Users.Add(new ApplicationUser { Id = "owner-1", UserName = "owner@example.test" });
+        await db.SaveChangesAsync();
+        var tokenAttempts = 0;
+        var createAttempts = 0;
+        var handler = new RecordingHandler(request =>
+        {
+            var path = request.RequestUri!.AbsolutePath;
+            if (path == "/token")
+            {
+                tokenAttempts++;
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("{\"access_token\":\"refreshed-access\"}", System.Text.Encoding.UTF8, "application/json")
+                };
+            }
+            if (path.EndsWith("/calendars", StringComparison.Ordinal))
+                return ++createAttempts == 1
+                    ? new HttpResponseMessage(HttpStatusCode.Unauthorized)
+                    : new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent("{\"id\":\"calendar-id\"}", System.Text.Encoding.UTF8, "application/json")
+                    };
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        });
+        var options = new DetourCalendarOptions { ClientId = "client", ClientSecret = "secret" };
+        var google = new GoogleCalendarClient(new StaticHttpClientFactory(handler), options);
+        var service = new DetourCalendarService(db, new CalendarOwnerLock(), new EphemeralDataProtectionProvider(), google, options);
+
+        await service.CompleteAuthorizationAsync("owner-1", "google-subject-1", "refresh-secret", "initial-access", DetourCalendarOptions.Scope);
+
+        Assert.Equal(1, tokenAttempts);
+        Assert.Equal(2, createAttempts);
+        Assert.Equal("calendar-id", db.GoogleCalendarConnections.Single().CalendarId);
+        Assert.True(db.GoogleCalendarConnections.Single().CalendarCreationAttempted);
+        Assert.False(db.GoogleCalendarConnections.Single().ReauthorizationRequired);
+        var createRequests = handler.Requests.Where(x => x.Url.EndsWith("/calendars", StringComparison.Ordinal)).ToArray();
+        Assert.Equal(["initial-access", "refreshed-access"], createRequests.Select(x => x.AuthorizationParameter));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Api_401_retry_is_bounded_and_refresh_invalid_grant_requires_reauthorization(bool invalidGrantOnRefresh)
+    {
+        await using var db = CreateDb();
+        db.Users.Add(new ApplicationUser { Id = "owner-1", UserName = "owner@example.test" });
+        db.Trips.Add(new TripDocumentRow
+        {
+            Id = Guid.NewGuid(), OwnerId = "owner-1", Version = 1,
+            Json = JsonSerializer.Serialize(SnapshotWithActivity("activity-1"), new JsonSerializerOptions(JsonSerializerDefaults.Web)),
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+        var tokenAttempts = 0;
+        var eventAttempts = 0;
+        var handler = new RecordingHandler(request =>
+        {
+            var path = request.RequestUri!.AbsolutePath;
+            if (path == "/token")
+            {
+                tokenAttempts++;
+                if (invalidGrantOnRefresh && tokenAttempts > 1)
+                    return new HttpResponseMessage(HttpStatusCode.BadRequest)
+                    {
+                        Content = new StringContent("{\"error\":\"invalid_grant\"}", System.Text.Encoding.UTF8, "application/json")
+                    };
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("{\"access_token\":\"access\"}", System.Text.Encoding.UTF8, "application/json")
+                };
+            }
+            if (path.EndsWith("/calendars", StringComparison.Ordinal))
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("{\"id\":\"calendar-id\"}", System.Text.Encoding.UTF8, "application/json")
+                };
+            if (path.Contains("/events", StringComparison.Ordinal))
+            {
+                eventAttempts++;
+                return new HttpResponseMessage(HttpStatusCode.Unauthorized);
+            }
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        });
+        var options = new DetourCalendarOptions { ClientId = "client", ClientSecret = "secret" };
+        var google = new GoogleCalendarClient(new StaticHttpClientFactory(handler), options);
+        var service = new DetourCalendarService(db, new CalendarOwnerLock(), new EphemeralDataProtectionProvider(), google, options);
+        await service.CompleteAuthorizationAsync("owner-1", "google-subject-1", "refresh-secret", "initial-access", DetourCalendarOptions.Scope);
+
+        await service.SyncOwnerAsync("owner-1");
+
+        var connection = db.GoogleCalendarConnections.Single();
+        Assert.Equal(2, tokenAttempts);
+        Assert.Equal(invalidGrantOnRefresh ? 1 : 2, eventAttempts);
+        Assert.Equal(invalidGrantOnRefresh, connection.ReauthorizationRequired);
+        Assert.Equal(1, connection.FailureCount);
+        if (invalidGrantOnRefresh)
+        {
+            Assert.Null(connection.NextAttemptAt);
+            Assert.Contains("Reconnect", connection.Error);
+        }
+        else
+        {
+            Assert.True(connection.NextAttemptAt > DateTimeOffset.UtcNow);
+            Assert.Contains("retry", connection.Error, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    [Fact]
     public async Task Invalid_client_refresh_preserves_token_and_retries_after_credentials_are_restored()
     {
         await using var db = CreateDb();
@@ -815,10 +1005,11 @@ public sealed class GoogleCalendarSyncTests
                 request.Method,
                 request.RequestUri!.ToString(),
                 request.Headers.Authorization?.Scheme,
+                request.Headers.Authorization?.Parameter,
                 request.Content is null ? "" : await request.Content.ReadAsStringAsync(cancellationToken)));
             return responder(request);
         }
     }
 
-    private sealed record CapturedRequest(HttpMethod Method, string Url, string? AuthorizationScheme, string Body);
+    private sealed record CapturedRequest(HttpMethod Method, string Url, string? AuthorizationScheme, string? AuthorizationParameter, string Body);
 }
