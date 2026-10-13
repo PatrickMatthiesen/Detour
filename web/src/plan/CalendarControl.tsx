@@ -15,24 +15,26 @@ const initial: CalendarStatus = {
 export default function CalendarControl() {
   const [status, setStatus] = useState<CalendarStatus>(initial);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState(() => new URLSearchParams(window.location.search).get("calendar") === "failed"
+  const [transportError, setTransportError] = useState("");
+  const [actionMessage, setActionMessage] = useState(() => new URLSearchParams(window.location.search).get("calendar") === "failed"
     ? "Google Calendar connection did not finish. Try connecting again."
     : "");
 
   const refresh = useCallback(async () => {
     try {
       setStatus(await getCalendarStatus());
+      setTransportError("");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not load calendar status.");
+      setTransportError(error instanceof Error ? error.message : "Could not load calendar status.");
     }
   }, []);
 
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => {
-    if (!status.connected) return;
+    if (!status.configured || (!status.connected && !status.error)) return;
     const timer = window.setInterval(() => void refresh(), 15000);
     return () => window.clearInterval(timer);
-  }, [refresh, status.connected]);
+  }, [refresh, status.configured, status.connected, status.error]);
   useEffect(() => {
     window.addEventListener("focus", refresh);
     return () => window.removeEventListener("focus", refresh);
@@ -40,11 +42,12 @@ export default function CalendarControl() {
 
   const run = async (action: () => Promise<CalendarStatus>) => {
     setBusy(true);
-    setMessage("");
+    setActionMessage("");
+    setTransportError("");
     try {
       setStatus(await action());
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Calendar request failed.");
+      setActionMessage(error instanceof Error ? error.message : "Calendar request failed.");
     } finally {
       setBusy(false);
     }
@@ -52,30 +55,34 @@ export default function CalendarControl() {
 
   const connect = async () => {
     setBusy(true);
-    setMessage("");
+    setActionMessage("");
+    setTransportError("");
     try {
       const result = await connectCalendar();
       window.location.assign(result.url);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not start Google Calendar connection.");
+      setActionMessage(error instanceof Error ? error.message : "Could not start Google Calendar connection.");
       setBusy(false);
     }
   };
 
   const retrySync = async () => {
     setBusy(true);
-    setMessage("");
+    setActionMessage("");
+    setTransportError("");
     try {
       setStatus(await syncCalendar());
       await new Promise(resolve => window.setTimeout(resolve, 15000));
       setStatus(await getCalendarStatus());
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Calendar sync failed.");
+      setActionMessage(error instanceof Error ? error.message : "Calendar sync failed.");
       try { setStatus(await getCalendarStatus()); } catch { /* Keep the action error visible. */ }
     } finally {
       setBusy(false);
     }
   };
+
+  const visibleErrors = [actionMessage, status.error, transportError].filter(Boolean);
 
   return <section className="plan-google-calendar" aria-label="Google Calendar sync">
     <div className="plan-google-calendar-copy">
@@ -89,7 +96,7 @@ export default function CalendarControl() {
       {(status.connected || status.calendarId || status.error) && <MutationButton type="button" onClick={() => void run(disconnectCalendar)} disabled={busy}><Unplug size={14}/> Disconnect</MutationButton>}
       {busy && <LoaderCircle className="plan-calendar-spinner" size={14} aria-label="Working"/>}
     </div>
-    {(status.error || message) && <p className="plan-google-calendar-error" role="status">{message || status.error} {status.connected && <MutationButton type="button" onClick={() => void connect()} disabled={busy}>Reconnect</MutationButton>}</p>}
+    {!!visibleErrors.length && <p className="plan-google-calendar-error" role="status">{visibleErrors.join(" · ")} {status.connected && <MutationButton type="button" onClick={() => void connect()} disabled={busy}>Reconnect</MutationButton>}</p>}
     {status.connected && status.lastSyncedAt && <p className="plan-google-calendar-sync">Last synced {new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(status.lastSyncedAt))}</p>}
   </section>;
 }
