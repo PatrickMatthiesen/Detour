@@ -214,7 +214,14 @@ public sealed class DetourCalendarService(
     private async Task CreateCalendarOnceAsync(GoogleCalendarConnectionRow connection, string accessToken, CancellationToken cancellationToken)
     {
         if (connection.CalendarCreationAttempted)
-            throw new CalendarRemoteException("Detour could not confirm whether Google created the calendar. Disconnect before reconnecting so Detour does not create duplicates.");
+        {
+            const string error = "Detour could not confirm whether Google created the calendar. Disconnect before reconnecting so Detour does not create duplicates.";
+            connection.Error = error;
+            connection.UpdatedAt = DateTimeOffset.UtcNow;
+            connection.Revision = Guid.NewGuid();
+            await db.SaveChangesAsync(cancellationToken);
+            throw new CalendarRemoteException(error, outcomeUncertain: true);
+        }
         connection.CalendarCreationAttempted = true;
         connection.UpdatedAt = DateTimeOffset.UtcNow;
         connection.Revision = Guid.NewGuid();
@@ -229,7 +236,7 @@ public sealed class DetourCalendarService(
         }
         catch (CalendarRemoteException ex)
         {
-            if (!ex.Transient) connection.CalendarCreationAttempted = false;
+            if (!ex.OutcomeUncertain) connection.CalendarCreationAttempted = false;
             connection.Error = ex.Message;
             connection.UpdatedAt = DateTimeOffset.UtcNow;
             connection.Revision = Guid.NewGuid();

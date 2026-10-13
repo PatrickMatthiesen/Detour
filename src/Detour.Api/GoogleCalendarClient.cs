@@ -18,9 +18,10 @@ public sealed class DetourCalendarOptions
 }
 
 public sealed class CalendarReauthorizationException(string message) : Exception(message);
-public sealed class CalendarRemoteException(string message, bool transient = false) : Exception(message)
+public sealed class CalendarRemoteException(string message, bool transient = false, bool outcomeUncertain = false) : Exception(message)
 {
     public bool Transient { get; } = transient;
+    public bool OutcomeUncertain { get; } = outcomeUncertain;
 }
 
 public interface IGoogleCalendarClient
@@ -81,16 +82,24 @@ public sealed class GoogleCalendarClient(IHttpClientFactory clients, DetourCalen
         }
         catch (Exception ex) when (ex is HttpRequestException || ex is TaskCanceledException && !cancellationToken.IsCancellationRequested)
         {
-            throw new CalendarRemoteException("Google Calendar creation had an uncertain network result. Disconnect before reconnecting so Detour does not create duplicates.", true);
+            throw new CalendarRemoteException("Google Calendar creation had an uncertain network result. Disconnect before reconnecting so Detour does not create duplicates.", transient: true, outcomeUncertain: true);
         }
         using (response)
         {
-        await EnsureSuccessAsync(response, "create the Detour calendar", cancellationToken);
-        var payload = await response.Content.ReadFromJsonAsync<JsonObject>(JsonOptions, cancellationToken);
-        var id = payload?["id"]?.GetValue<string>();
-        return !string.IsNullOrWhiteSpace(id)
-            ? id
-            : throw new CalendarRemoteException("Google created a calendar without returning its ID. Disconnect before reconnecting so Detour does not create duplicates.", true);
+            await EnsureSuccessAsync(response, "create the Detour calendar", cancellationToken, creationRequest: true);
+            string? id;
+            try
+            {
+                var payload = await response.Content.ReadFromJsonAsync<JsonObject>(JsonOptions, cancellationToken);
+                id = payload?["id"]?.GetValue<string>();
+            }
+            catch (Exception ex) when (ex is JsonException or InvalidOperationException)
+            {
+                throw new CalendarRemoteException("Google returned an unreadable calendar creation result. Disconnect before reconnecting so Detour does not create duplicates.", transient: true, outcomeUncertain: true);
+            }
+            return !string.IsNullOrWhiteSpace(id)
+                ? id
+                : throw new CalendarRemoteException("Google created a calendar without returning its ID. Disconnect before reconnecting so Detour does not create duplicates.", transient: true, outcomeUncertain: true);
         }
     }
 
@@ -161,7 +170,7 @@ public sealed class GoogleCalendarClient(IHttpClientFactory clients, DetourCalen
         return request;
     }
 
-    private static async Task EnsureSuccessAsync(HttpResponseMessage response, string action, CancellationToken cancellationToken)
+    private static async Task EnsureSuccessAsync(HttpResponseMessage response, string action, CancellationToken cancellationToken, bool creationRequest = false)
     {
         if (response.IsSuccessStatusCode) return;
         if (response.StatusCode == HttpStatusCode.Unauthorized)
@@ -169,7 +178,9 @@ public sealed class GoogleCalendarClient(IHttpClientFactory clients, DetourCalen
         var code = await ReadErrorCodeAsync(response, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Forbidden && code is "insufficientPermissions" or "insufficient_scope")
             throw new CalendarReauthorizationException("Google Calendar permission is missing. Reconnect and approve calendar access.");
-        throw new CalendarRemoteException($"Could not {action}. Google returned {(int)response.StatusCode}.", IsTransient(response.StatusCode));
+        throw new CalendarRemoteException($"Could not {action}. Google returned {(int)response.StatusCode}.",
+            transient: IsTransient(response.StatusCode),
+            outcomeUncertain: creationRequest && (response.StatusCode == HttpStatusCode.RequestTimeout || (int)response.StatusCode >= 500));
     }
 
     private static bool IsTransient(HttpStatusCode status)

@@ -25,6 +25,8 @@ Disconnecting deletes the local encrypted credential and event tracking. The rem
 
 Google can create a calendar and lose the HTTP response before Detour receives its ID. Detour records each creation attempt before calling Google. If the result is uncertain, it does not issue another create request. The status reports an error and requires disconnecting before reconnecting. This avoids automatic duplicate creation, though the uncertain calendar may remain in the Google account.
 
+A definite rate-limit rejection (HTTP 429) leaves creation available for retry. Network failures, server failures, and unreadable success responses keep the creation guard because Google may already have created the calendar. Reconnecting after an uncertain outcome preserves an actionable error and the Disconnect control.
+
 The per-owner synchronization lock is process-local. The current self-hosted deployment runs one API process, which matches this design. Multiple API replicas would require a distributed lock before enabling calendar sync.
 
 ## API

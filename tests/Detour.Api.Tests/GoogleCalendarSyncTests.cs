@@ -210,7 +210,7 @@ public sealed class GoogleCalendarSyncTests
         await db.SaveChangesAsync();
         var google = new FakeGoogleCalendarClient
         {
-            CreateError = new CalendarRemoteException("Uncertain create result.", transient: true)
+            CreateError = new CalendarRemoteException("Uncertain create result.", transient: true, outcomeUncertain: true)
         };
         var service = CreateService(db, google);
 
@@ -241,15 +241,18 @@ public sealed class GoogleCalendarSyncTests
         Assert.Equal("Bearer", request.AuthorizationScheme);
     }
 
-    [Fact]
-    public async Task Missing_calendar_id_is_ambiguous_and_blocks_a_second_create()
+    [Theory]
+    [InlineData("{}")]
+    [InlineData("{")]
+    [InlineData("{\"id\":123}")]
+    public async Task Calendar_creation_without_confirmed_id_is_ambiguous_and_blocks_a_second_create(string responseBody)
     {
         await using var db = CreateDb();
         db.Users.Add(new ApplicationUser { Id = "owner-1", UserName = "owner@example.test" });
         await db.SaveChangesAsync();
         var handler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
         {
-            Content = new StringContent("{}", System.Text.Encoding.UTF8, "application/json")
+            Content = new StringContent(responseBody, System.Text.Encoding.UTF8, "application/json")
         });
         var options = new DetourCalendarOptions { ClientId = "client", ClientSecret = "secret" };
         var google = new GoogleCalendarClient(new StaticHttpClientFactory(handler), options);
@@ -259,10 +262,78 @@ public sealed class GoogleCalendarSyncTests
             service.CompleteAuthorizationAsync("owner-1", "google-subject-1", "refresh", "access", DetourCalendarOptions.Scope));
         await Assert.ThrowsAsync<CalendarRemoteException>(() =>
             service.CompleteAuthorizationAsync("owner-1", "google-subject-1", "refresh", "access", DetourCalendarOptions.Scope));
+        var status = await service.GetStatusAsync("owner-1");
 
         Assert.Single(handler.Requests);
         Assert.True(db.GoogleCalendarConnections.Single().CalendarCreationAttempted);
         Assert.Null(db.GoogleCalendarConnections.Single().CalendarId);
+        Assert.False(status.Connected);
+        Assert.Contains("Disconnect", status.Error);
+    }
+
+    [Fact]
+    public async Task Calendar_creation_rate_limit_is_retryable_and_successful_reconnect_does_not_create_again()
+    {
+        await using var db = CreateDb();
+        db.Users.Add(new ApplicationUser { Id = "owner-1", UserName = "owner@example.test" });
+        await db.SaveChangesAsync();
+        var responses = new Queue<HttpResponseMessage>(
+        [
+            new HttpResponseMessage(HttpStatusCode.TooManyRequests),
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("{\"id\":\"detour-calendar\"}", System.Text.Encoding.UTF8, "application/json")
+            }
+        ]);
+        var handler = new RecordingHandler(_ => responses.Dequeue());
+        var options = new DetourCalendarOptions { ClientId = "client", ClientSecret = "secret" };
+        var google = new GoogleCalendarClient(new StaticHttpClientFactory(handler), options);
+        var service = new DetourCalendarService(db, new CalendarOwnerLock(), new EphemeralDataProtectionProvider(), google, options);
+
+        var rejected = await Assert.ThrowsAsync<CalendarRemoteException>(() =>
+            service.CompleteAuthorizationAsync("owner-1", "google-subject-1", "refresh", "access", DetourCalendarOptions.Scope));
+        var afterRejection = await service.GetStatusAsync("owner-1");
+        var connection = db.GoogleCalendarConnections.Single();
+        Assert.True(rejected.Transient);
+        Assert.False(rejected.OutcomeUncertain);
+        Assert.False(connection.CalendarCreationAttempted);
+        Assert.Null(connection.CalendarId);
+        Assert.Contains("429", afterRejection.Error);
+
+        await service.CompleteAuthorizationAsync("owner-1", "google-subject-1", "refresh", "access", DetourCalendarOptions.Scope);
+        await service.CompleteAuthorizationAsync("owner-1", "google-subject-1", "refresh", "access", DetourCalendarOptions.Scope);
+        var recovered = await service.GetStatusAsync("owner-1");
+
+        Assert.True(recovered.Connected);
+        Assert.Equal("detour-calendar", recovered.CalendarId);
+        Assert.Null(recovered.Error);
+        Assert.Equal(2, handler.Requests.Count);
+    }
+
+    [Fact]
+    public async Task Calendar_creation_server_error_is_transient_but_outcome_uncertain_and_not_retried()
+    {
+        await using var db = CreateDb();
+        db.Users.Add(new ApplicationUser { Id = "owner-1", UserName = "owner@example.test" });
+        await db.SaveChangesAsync();
+        var handler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
+        var options = new DetourCalendarOptions { ClientId = "client", ClientSecret = "secret" };
+        var google = new GoogleCalendarClient(new StaticHttpClientFactory(handler), options);
+        var service = new DetourCalendarService(db, new CalendarOwnerLock(), new EphemeralDataProtectionProvider(), google, options);
+
+        var error = await Assert.ThrowsAsync<CalendarRemoteException>(() =>
+            service.CompleteAuthorizationAsync("owner-1", "google-subject-1", "refresh", "access", DetourCalendarOptions.Scope));
+        Assert.True(error.Transient);
+        Assert.True(error.OutcomeUncertain);
+        await Assert.ThrowsAsync<CalendarRemoteException>(() =>
+            service.CompleteAuthorizationAsync("owner-1", "google-subject-1", "refresh", "access", DetourCalendarOptions.Scope));
+
+        var status = await service.GetStatusAsync("owner-1");
+        Assert.False(status.Connected);
+        Assert.Null(status.CalendarId);
+        Assert.Contains("Disconnect", status.Error);
+        Assert.True(db.GoogleCalendarConnections.Single().CalendarCreationAttempted);
+        Assert.Single(handler.Requests);
     }
 
     [Fact]
