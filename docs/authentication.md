@@ -91,3 +91,11 @@ Startup applies the checked-in EF migration, which creates the aggregate, Identi
 After the first Google login, set `TripAdvisor:SeedOwnerId` to that user's Identity ID if the initial Japan seed should be loaded for the authenticated owner. Development local bypass seeds the explicit `local-dev` owner automatically.
 
 The product and .NET projects are now named Detour. Existing `TripAdvisor:*` configuration keys, OAuth identifiers, data-protection application name and legacy migration table names are retained for compatibility. Renaming the product does not require replacing persisted keys, database storage or existing client configuration.
+
+## Google Calendar authorization
+
+Google Calendar uses a separate OAuth scheme and callback from Google sign-in. It reuses `Auth:Google:ClientId` and `Auth:Google:ClientSecret`, but requests the narrow `calendar.app.created` scope and an offline refresh token. Register `<Auth:PublicUrl>/signin-google-calendar` as another authorized redirect URI in Google Cloud. See [calendar.md](calendar.md) for consent-screen setup and sync behavior.
+
+Calendar connection, retry, and disconnection accept only the Identity browser cookie. OpenIddict bearer tokens cannot change the connection. The OAuth state contains the local owner ID inside ASP.NET Core's protected state, and the callback verifies that the same browser session is still signed in. Detour also stores the Google account subject and rejects a reconnect from a different Google account until the owner disconnects.
+
+The encrypted refresh token depends on the same persistent Data Protection keys used by browser authentication. Back up `DataProtection:KeysPath`. Detour never returns or logs Google access or refresh tokens.

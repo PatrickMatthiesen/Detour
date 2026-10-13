@@ -31,7 +31,7 @@ export function dayCapacity(snapshot: TripSnapshot, date: string, capacityMinute
   const activities = snapshot.activities.filter(item => item.date === date && item.status !== 'cancelled');
   const travel = snapshot.travelLegs.filter(item => item.date === date);
   const duration = (item: typeof activities[number]) => item.durationMinutes ??
-    snapshot.places.find(place => place.id === item.placeId)?.durationMinutes ?? null;
+    (item.kind && item.kind !== "activity" ? null : snapshot.places.find(place => place.id === item.placeId)?.durationMinutes ?? null);
   const known = [...activities.map(duration), ...travel.map(item => item.durationMinutes ?? null)];
   const allocatedMinutes = known.reduce<number>((sum, value) => sum + (value ?? 0), 0);
   const unknownCount = known.filter(value => value === null).length;

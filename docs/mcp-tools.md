@@ -89,3 +89,13 @@ Other fields are preserved. No separate attachment tool is needed. Import failur
 The MCP server instructions and `edit_place` description tell the agent to find and import an image when adding or enriching a stop without a photo. Choose the image that best represents the experience: the place itself, its food, the activity, or another relevant subject. Preserve existing photos unless asked to replace them, and respect requests to skip photos.
 
 Because `edit_place` fetches a public image URL, its tool annotation declares open-world access. Find images with the agent's research tools first; the tool does not search the web. Keep the source URL and known attribution. Use `place` for the actual place or its food/activity, `neighbourhood` for the surrounding area, and `illustrative` for a representative example. Never present an example as the actual place or invent image URLs or attribution. If research is unavailable, no suitable image is found, or import fails, save the stop without a photo and tell the user which stop still needs one. Do not blindly retry an import after an uncertain response: read the place and inspect its photo first. See [photo storage and migration](photos.md).
+
+## Calendar events and practical steps
+
+When Google Calendar is connected, plan edits also update the separate trip calendar in the background. The agent edits Detour records with the existing version checks; it does not need the user's Google credentials.
+
+Use `edit_activity` for visits and practical steps. `kind` accepts `activity`, `check-in`, `check-out`, `departure`, or `task`. A step needs a `date` and either `title` or a saved `placeId`. Optional `startTime` uses the trip time zone. `notes` becomes the calendar description. `location` and `googleMapsUrl` specify the meeting point or directions; a linked place supplies defaults when these fields are absent. `reminderMinutes` sets a Google Calendar popup reminder, from 0 (at the start) to 40320. Remove it with `clearFields: ["reminderMinutes"]`.
+
+For example, create a `check-out` entry titled "Check out and leave bags at reception", with the verified checkout date/time and notes about luggage collection. Create a separate `departure` entry for leaving for the station. Do not infer clock times from hotel dates or travel estimates. `edit_travel_leg` also accepts an optional `startTime`.
+
+An entry without a clock time stays date-only in Google Calendar. A timed entry without a known duration uses a labelled one-minute marker. Selected places remain ideas until an activity schedules them. Confirmation codes and PIN fields are not copied into calendar descriptions. User-written notes are copied, so include only the information intended for the event.

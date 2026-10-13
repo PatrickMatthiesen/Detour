@@ -86,6 +86,10 @@ public sealed class Stay
 
 public sealed class Activity
 {
+    public string Kind { get; set; } = "activity";
+    public string? Location { get; set; }
+    public string? GoogleMapsUrl { get; set; }
+    public int? ReminderMinutes { get; set; }
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
     public string? PlaceId { get; set; }
     public string? Title { get; set; }
@@ -98,6 +102,7 @@ public sealed class Activity
 
 public sealed class TravelLeg
 {
+    public TimeOnly? StartTime { get; set; }
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
     public string From { get; set; } = "";
     public string To { get; set; } = "";

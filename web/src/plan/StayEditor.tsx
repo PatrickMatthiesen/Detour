@@ -52,6 +52,7 @@ export default function StayEditor({snapshot,initialId,onClose,onSave}:Props) {
         <p id="stay-city-help" className="stay-help">Choose one location for this stay. Put day trips and other destinations in the label or notes.</p>
         <div className="stay-dates"><label>Arrival<input required type="date" min={base.trip.startDate} max={base.trip.endDate} value={editing.checkIn} onInput={e=>setEditing({...editing,checkIn:e.currentTarget.value})}/></label><label>Departure<input required type="date" min={base.trip.startDate} max={base.trip.endDate} value={editing.checkOut} onInput={e=>setEditing({...editing,checkOut:e.currentTarget.value})}/></label></div>
         <label><span>Label <span className="stay-help">(optional)</span></span><input value={editing.name || ""} onChange={e=>setEditing({...editing,name:e.target.value})}/></label>
+        <label><span>Notes <span className="stay-help">(optional)</span></span><textarea rows={3} value={editing.notes || ""} onChange={e=>setEditing({...editing,notes:e.target.value})}/></label>
         {existing && <label className="stay-shift"><input type="checkbox" checked={shiftLater} onChange={e=>setShiftLater(e.target.checked)}/><span>Shift later stays by the departure-date change</span></label>}
         {existing && <MutationButton type="button" className="stay-remove" onClick={()=>setProposed(ordered.filter(s=>s.id!==editing.id))}>Remove this stay</MutationButton>}
         <p className="stay-help">Moving a stay earlier or later swaps it with its neighbour and keeps both stay lengths.</p>

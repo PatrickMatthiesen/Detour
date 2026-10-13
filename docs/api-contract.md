@@ -10,8 +10,8 @@ The expected snapshot shape is:
   "trip": { "id": "japan-2026", "name": "Japan 2026", "startDate": "2026-09-30", "endDate": "2026-10-25", "timeZone":"Asia/Tokyo", "arrival": {"airport":"HND","date":"2026-10-02","localDateTime":"2026-10-02T00:05:00+09:00"}, "departure": {"airport":"HND","date":"2026-10-25","localDateTime":"2026-10-25T01:25:00+09:00"} },
   "places": [{"id":"place-1","name":"Ginza Itoya","city":"Tokyo","area":"Ginza","category":"Culture, Shopping","description":"...","notes":"...","sourceUrl":"https://...","googleMapsUrl":"https://...","durationMinutes":90,"priority":"nice","status":"candidate","latitude":null,"longitude":null,"selected":false}],
   "stays": [{"id":"stay-1","city":"Tokyo","name":"...","checkIn":"2026-10-01","checkOut":"2026-10-03","status":"planned","bookingId":null}],
-  "travelLegs": [{"id":"leg-1","from":"Tokyo","to":"Kyoto","date":"2026-10-08","durationMinutes":140,"mode":"train","estimated":true}],
-  "activities": [{"id":"activity-1","placeId":"place-1","title":null,"date":"2026-10-03","startTime":null,"durationMinutes":90,"status":"planned"}],
+  "travelLegs": [{"id":"leg-1","from":"Tokyo","to":"Kyoto","date":"2026-10-08","startTime":null,"durationMinutes":140,"mode":"train","estimated":true}],
+  "activities": [{"id":"activity-1","placeId":"place-1","title":null,"date":"2026-10-03","startTime":null,"durationMinutes":90,"status":"planned","kind":"activity","notes":"","location":null,"googleMapsUrl":null,"reminderMinutes":null}],
   "bookings": [{"id":"booking-1","kind":"hotel","title":"...","status":"confirmed","bookingNumber":"0012345678","pin":"0042","confirmationCode":"...","url":"...","date":"2026-10-01","start":"2026-10-01T08:00:00+09:00","end":"2026-10-02T11:00:00+09:00","checkIn":"2026-10-01","checkOut":"2026-10-02","location":"...","notes":"..."}],
   "tasks": [{"id":"task-1","title":"Check passport expiry","dueDate":"2026-09-15","completed":false,"scope":"trip","reminderAt":null}],
   "packingItems": [{"id":"pack-1","name":"Passport","category":"Documents","quantity":1,"packed":false,"bag":"Personal item","notes":""}]
@@ -32,3 +32,9 @@ Backend implementation notes:
 - Browser login is `GET /auth/login`, session inspection is `GET /auth/me`, CSRF token retrieval is `GET /auth/csrf`, and logout is `POST /auth/logout`. Cookie-authenticated mutations must send the CSRF token in `X-CSRF-TOKEN`.
 
 Booking `bookingNumber`, `pin` (PIN or access code), and `confirmationCode` are optional strings, preserving leading zeros and letters. Use `notes` for additional references or check-in instructions. Omitted fields are preserved in partial edits; set a field to null to clear it.
+
+## Google trip calendar
+
+Calendar access is separate from browser Google sign-in. `GET /api/calendar` returns configuration, connection state, calendar ID, last synced version/time, and any actionable error. Cookie-authenticated `POST /api/calendar/connect` returns an authorization URL. `POST /api/calendar/sync` requests a background retry; `DELETE /api/calendar` disconnects without deleting the remote calendar. These mutations require the browser CSRF token. See [calendar setup](calendar.md).
+
+Activities accept `kind` (`activity`, `check-in`, `check-out`, `departure`, `task`), `notes`, optional `location`, `googleMapsUrl`, and `reminderMinutes` (null disables reminders; 0 fires at the start; maximum 40320). Journeys also accept an optional `startTime`. Plan IDs must be unique within each collection. Date-only records stay date-only when exported. Hotel checkout is an exclusive end date, not a clock time.

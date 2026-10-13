@@ -56,6 +56,7 @@ function cleanTravel(leg: TravelLeg): TravelLeg {
     to: leg.to.trim(),
     date: leg.date.trim(),
     mode: leg.mode === undefined || leg.mode === null ? leg.mode : optionalMode(leg.mode),
+    notes: leg.notes?.trim() || "",
     estimated: Boolean(leg.estimated),
   };
 }
@@ -148,6 +149,11 @@ export default function TravelEditor({ initial, isNew, onClose, onSave, onRemove
               </label>
             </div>
 
+            <label>
+              Start time <span className="travel-editor-optional">(optional, set manually)</span>
+              <input type="time" value={draft.startTime || ""} onChange={(event) => update("startTime", event.target.value || null)} />
+            </label>
+
             <div className="travel-editor-grid">
               <label>
                 Date
@@ -172,6 +178,10 @@ export default function TravelEditor({ initial, isNew, onClose, onSave, onRemove
                 <span>Estimated duration</span>
               </label>
             </div>
+            <label>
+              Notes <span className="travel-editor-optional">(optional)</span>
+              <textarea rows={3} value={draft.notes || ""} onChange={(event) => update("notes", event.target.value)} />
+            </label>
 
             {!isNew && onRemove && (
               <MutationButton type="button" className="travel-editor-remove" onClick={() => setConfirmRemove(true)}>Remove journey</MutationButton>

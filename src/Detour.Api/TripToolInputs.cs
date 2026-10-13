@@ -118,6 +118,13 @@ public sealed class PackingItemChanges
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed class ActivityChanges
 {
+    [Description("One of activity, check-in, check-out, departure, task. Use explicit entries for checkout, leaving for a destination, and other practical steps. Never infer a clock time from a booking date.")]
+    public string? Kind { get; set; }
+    public string? Location { get; set; }
+    [Description("Verified HTTP(S) Maps or directions link for this event.")]
+    public string? GoogleMapsUrl { get; set; }
+    [Description("Optional Google Calendar popup reminder, minutes before start, 0 to 40320. Use clearFields to remove.")]
+    public int? ReminderMinutes { get; set; }
     public string? PlaceId { get; set; }
     public string? Title { get; set; }
     public DateOnly? Date { get; set; }
@@ -142,6 +149,7 @@ public sealed class StayChanges
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed class TravelLegChanges
 {
+    public TimeOnly? StartTime { get; set; }
     public string? From { get; set; }
     public string? To { get; set; }
     public DateOnly? Date { get; set; }
