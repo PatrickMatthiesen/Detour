@@ -125,6 +125,7 @@ const activityDuration = (snapshot: TripSnapshot, activity: TripSnapshot["activi
   if (typeof activity.durationMinutes === "number" && Number.isFinite(activity.durationMinutes) && activity.durationMinutes >= 0) {
     return activity.durationMinutes;
   }
+  if (activity.kind && activity.kind !== "activity") return null;
   const place = activity.placeId ? snapshot.places.find((candidate) => candidate.id === activity.placeId) : undefined;
   return typeof place?.durationMinutes === "number" && Number.isFinite(place.durationMinutes) && place.durationMinutes >= 0
     ? place.durationMinutes

@@ -82,6 +82,15 @@ describe("stay editing", () => {
     expect(result.warnings).toEqual([]);
   });
 
+  it("allows saving a stay notes-only edit", () => {
+    const current = stay("a", "Tokyo", "2026-10-01", "2026-10-03");
+    const result = reviewStayRoute(snapshot({ stays: [current] }), [
+      stay("a", "Tokyo", "2026-10-01", "2026-10-03", { notes: "Ask for a quiet room" }),
+    ]);
+    expect(result.changes).toEqual(["Tokyo stay notes updated (1–3 Oct)."]);
+    expect(result.errors).toEqual([]);
+  });
+
   it("reviews activities, fixed linked bookings, travel boundaries, unallocated nights, and uncovered nights", () => {
     const result = reviewStayRoute(snapshot({
       stays: [stay("a", "Tokyo", "2026-10-01", "2026-10-04", { bookingId: "hotel" })],

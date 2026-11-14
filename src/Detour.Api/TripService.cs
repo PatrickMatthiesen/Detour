@@ -446,7 +446,15 @@ public sealed class TripService(TripDbContext db, OwnerAccessor ownerAccessor, P
             if (place.DurationMinutes is <= 0) throw new ArgumentException("Place duration must be positive.");
         }
         foreach (var leg in snapshot.TravelLegs) if (leg.DurationMinutes is <= 0) throw new ArgumentException("Travel duration must be positive.");
-        foreach (var activity in snapshot.Activities) if (activity.DurationMinutes is <= 0) throw new ArgumentException("Activity duration must be positive.");
+        foreach (var activity in snapshot.Activities)
+        {
+            if (activity.DurationMinutes is <= 0) throw new ArgumentException("Activity duration must be positive.");
+            var error = CalendarEventValidation.ValidateActivity(activity, snapshot);
+            if (error is not null) throw new ArgumentException(error);
+        }
+        foreach (var ids in new[] { snapshot.Activities.Select(x => x.Id), snapshot.Bookings.Select(x => x.Id), snapshot.Stays.Select(x => x.Id), snapshot.TravelLegs.Select(x => x.Id) })
+            if (ids.Any(x => string.IsNullOrWhiteSpace(x) || x.Length > 200) || ids.Distinct(StringComparer.Ordinal).Count() != ids.Count())
+                throw new ArgumentException("Plan record IDs must be non-empty, at most 200 characters, and unique within their collection.");
         foreach (var booking in snapshot.Bookings)
         {
             ValidateUrl(booking.Url, "booking URL");

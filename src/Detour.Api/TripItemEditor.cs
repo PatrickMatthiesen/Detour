@@ -194,6 +194,7 @@ public sealed class TripItemEditor(TripService service)
                 if (!string.IsNullOrWhiteSpace(activity.PlaceId) && !snapshot.Places.Any(x => x.Id == activity.PlaceId))
                     return $"Activity placeId '{activity.PlaceId}' does not identify an existing place.";
                 if (activity.DurationMinutes is <= 0) return "Activity durationMinutes must be positive when supplied.";
+                if (CalendarEventValidation.ValidateActivity(activity, snapshot) is { } activityError) return activityError;
                 break;
             case TravelLeg leg:
                 if (string.IsNullOrWhiteSpace(leg.From) || string.IsNullOrWhiteSpace(leg.To)) return "Travel leg from and to are required.";

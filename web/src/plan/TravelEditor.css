@@ -30,7 +30,8 @@
 .travel-editor-fields { display: flex; flex-direction: column; gap: 16px; padding: 20px; }
 .travel-editor-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .travel-editor label { display: flex; flex-direction: column; min-width: 0; gap: 7px; color: var(--color-ink); font-size: 13px; }
-.travel-editor input:not([type="checkbox"]) { width: 100%; min-width: 0; border: 1px solid #cbd5cd; border-radius:var(--radius-sm); padding: 9px; background: #fff; color: var(--travel-ink); }
+.travel-editor input:not([type="checkbox"]), .travel-editor textarea { width: 100%; min-width: 0; border: 1px solid #cbd5cd; border-radius:var(--radius-sm); padding: 9px; background: #fff; color: var(--travel-ink); }
+.travel-editor textarea { resize: vertical; line-height: 1.45; }
 .travel-editor input[aria-invalid="true"] { border-color: var(--travel-coral); }
 .travel-editor-optional { color: var(--travel-muted); font-size: 12px; font-weight: 400; }
 .travel-editor-check { align-self: end; flex-direction: row !important; align-items: center; min-height: 39px; }

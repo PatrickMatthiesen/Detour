@@ -10,6 +10,8 @@ namespace Detour.Api;
 [McpServerToolType]
 public sealed class TripMcpTools(TripService service, TripItemEditor editor)
 {
+    public const string CalendarInstructions = "When the user connects Google Calendar in Detour, plan changes are mirrored into a separate Google trip calendar in the background. Edit activity notes for event descriptions, and use explicit timed activities for checkout and leaving for destinations. Never invent times. Calendar connection and credentials belong to the user in the browser, not to agent tools.";
+
     public const string PhotoInstructions = "When adding or enriching a stop without a photo, use available research tools to find an image that best represents the experience: the place itself, its food, the activity, or another relevant subject. Import the chosen image with edit_place changes.photo; Detour does not search for images. Preserve existing photos unless asked to replace them. Respect requests to skip photos. Keep the source URL and known attribution. Use kind place for the actual place or its food/activity, neighbourhood for the surrounding area, and illustrative for a representative example; do not present an example as the actual place. Never invent image URLs or attribution. If research is unavailable, no suitable image is found, or import fails, save the stop without a photo and tell the user which stop still needs one.";
 
     [McpServerTool(ReadOnly = true, Destructive = false, OpenWorld = false, UseStructuredContent = true)]
@@ -60,7 +62,7 @@ public sealed class TripMcpTools(TripService service, TripItemEditor editor)
         CancellationToken cancellationToken = default)
         => Edit("places", operation, id, expectedVersion, changes, clearFields, cancellationToken);
 
-    [McpServerTool(ReadOnly = false, Destructive = true, OpenWorld = false, Idempotent = true, UseStructuredContent = true)]
+    [McpServerTool(ReadOnly = false, Destructive = true, OpenWorld = true, Idempotent = true, UseStructuredContent = true)]
     [Description("Booking record. Required on create: title. Record provided booking facts; this tool does not purchase, reserve or cancel with providers. Create, update or delete only this record. Omitted fields are preserved. Read first; on conflict re-read and reassess instead of blindly retrying. Reuse the same ID when retrying a create; never generate a second ID after an uncertain response.")]
     public Task<ItemEditResult> EditBooking(
         EditOperation operation,
@@ -71,7 +73,7 @@ public sealed class TripMcpTools(TripService service, TripItemEditor editor)
         CancellationToken cancellationToken = default)
         => Edit("bookings", operation, id, expectedVersion, changes, clearFields, cancellationToken);
 
-    [McpServerTool(ReadOnly = false, Destructive = true, OpenWorld = false, Idempotent = true, UseStructuredContent = true)]
+    [McpServerTool(ReadOnly = false, Destructive = true, OpenWorld = true, Idempotent = true, UseStructuredContent = true)]
     [Description("Preparation checklist. Required on create: title and scope (before or during). completed toggles completion; dueDate is YYYY-MM-DD, reminderAt is ISO date-time with offset. Create, update or delete only this record. Omitted fields are preserved. Read first; on conflict re-read and reassess instead of blindly retrying. Reuse the same ID when retrying a create; never generate a second ID after an uncertain response.")]
     public Task<ItemEditResult> EditTask(
         EditOperation operation,
@@ -82,7 +84,7 @@ public sealed class TripMcpTools(TripService service, TripItemEditor editor)
         CancellationToken cancellationToken = default)
         => Edit("tasks", operation, id, expectedVersion, changes, clearFields, cancellationToken);
 
-    [McpServerTool(ReadOnly = false, Destructive = true, OpenWorld = false, Idempotent = true, UseStructuredContent = true)]
+    [McpServerTool(ReadOnly = false, Destructive = true, OpenWorld = true, Idempotent = true, UseStructuredContent = true)]
     [Description("Packing list. Required on create: name. quantity must be at least 1; packed toggles packed status. Create, update or delete only this record. Omitted fields are preserved. Read first; on conflict re-read and reassess instead of blindly retrying. Reuse the same ID when retrying a create; never generate a second ID after an uncertain response.")]
     public Task<ItemEditResult> EditPackingItem(
         EditOperation operation,
@@ -93,8 +95,8 @@ public sealed class TripMcpTools(TripService service, TripItemEditor editor)
         CancellationToken cancellationToken = default)
         => Edit("packingItems", operation, id, expectedVersion, changes, clearFields, cancellationToken);
 
-    [McpServerTool(ReadOnly = false, Destructive = true, OpenWorld = false, Idempotent = true, UseStructuredContent = true)]
-    [Description("Scheduled day activity. Required on create: date and either existing placeId or title. Creating an activity does not make a reservation. Create, update or delete only this record. Omitted fields are preserved. Read first; on conflict re-read and reassess instead of blindly retrying. Reuse the same ID when retrying a create; never generate a second ID after an uncertain response.")]
+    [McpServerTool(ReadOnly = false, Destructive = true, OpenWorld = true, Idempotent = true, UseStructuredContent = true)]
+    [Description("Scheduled day activity or practical step (kind: activity, check-in, check-out, departure, task). Notes become the Google Calendar description when connected; location, googleMapsUrl and reminderMinutes carry into the event. Use explicit startTime for checkout and leave-for entries; never guess times from booking dates. Required on create: date and either existing placeId or title. Creating an activity does not make a reservation. Create, update or delete only this record. Omitted fields are preserved. Read first; on conflict re-read and reassess instead of blindly retrying. Reuse the same ID when retrying a create; never generate a second ID after an uncertain response.")]
     public Task<ItemEditResult> EditActivity(
         EditOperation operation,
         [Description("Existing record ID for update/delete; new stable unique ID for create. Never update by name.")] string id,
@@ -104,7 +106,7 @@ public sealed class TripMcpTools(TripService service, TripItemEditor editor)
         CancellationToken cancellationToken = default)
         => Edit("activities", operation, id, expectedVersion, changes, clearFields, cancellationToken);
 
-    [McpServerTool(ReadOnly = false, Destructive = true, OpenWorld = false, Idempotent = true, UseStructuredContent = true)]
+    [McpServerTool(ReadOnly = false, Destructive = true, OpenWorld = true, Idempotent = true, UseStructuredContent = true)]
     [Description("Planned city stay. Required on create: city, checkIn, checkOut. Dates are YYYY-MM-DD; checkout is exclusive. City must identify one mapped city or city area; put extra destinations in name or notes. An unknown city needs a saved place with matching city text and valid coordinates first. This is a route plan, not a hotel booking. Create, update or delete only this record. Omitted fields are preserved. Read first; on conflict re-read and reassess instead of blindly retrying. Reuse the same ID when retrying a create; never generate a second ID after an uncertain response.")]
     public Task<ItemEditResult> EditStay(
         EditOperation operation,
@@ -115,7 +117,7 @@ public sealed class TripMcpTools(TripService service, TripItemEditor editor)
         CancellationToken cancellationToken = default)
         => Edit("stays", operation, id, expectedVersion, changes, clearFields, cancellationToken);
 
-    [McpServerTool(ReadOnly = false, Destructive = true, OpenWorld = false, Idempotent = true, UseStructuredContent = true)]
+    [McpServerTool(ReadOnly = false, Destructive = true, OpenWorld = true, Idempotent = true, UseStructuredContent = true)]
     [Description("Journey between cities. Required on create: from, to, date. Leave unknown duration unset and estimated true; do not invent precise travel times. Create, update or delete only this record. Omitted fields are preserved. Read first; on conflict re-read and reassess instead of blindly retrying. Reuse the same ID when retrying a create; never generate a second ID after an uncertain response.")]
     public Task<ItemEditResult> EditTravelLeg(
         EditOperation operation,

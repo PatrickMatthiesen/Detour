@@ -159,6 +159,9 @@ export function reviewStayRoute(snapshot: TripSnapshot, proposed: Stay[]): StayR
     if ((oldStay.name || "").trim() !== (newStay.name || "").trim()) {
       changes.push(`${cityText(newStay.city)} name: ${oldStay.name?.trim() || "(unnamed)"} → ${newStay.name?.trim() || "(unnamed)"}.`);
     }
+    if ((oldStay.notes || "").trim() !== (newStay.notes || "").trim()) {
+      changes.push(`${cityText(newStay.city)} stay notes updated (${formatStayDates(newStay)}).`);
+    }
     if (datesChanged || cityChanged) {
       changedRouteIds.add(id);
       changedOldOrNew.push(oldStay, newStay);

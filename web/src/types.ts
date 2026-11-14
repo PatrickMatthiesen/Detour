@@ -36,6 +36,8 @@ export interface Place {
   photo?: PlacePhotoMetadata | null;
 }
 
+export type ActivityKind = "activity" | "check-in" | "check-out" | "departure" | "task";
+
 export interface Activity {
   id: string;
   placeId: string | null;
@@ -43,6 +45,11 @@ export interface Activity {
   date: string;
   startTime?: string | null;
   durationMinutes?: number | null;
+  kind?: ActivityKind;
+  location?: string | null;
+  googleMapsUrl?: string | null;
+  notes?: string | null;
+  reminderMinutes?: number | null;
   status?: string | null;
 }
 export interface Stay {
@@ -51,6 +58,7 @@ export interface Stay {
   name?: string | null;
   checkIn: string;
   checkOut: string;
+  notes?: string | null;
   status?: string | null;
   bookingId?: string | null;
 }
@@ -59,8 +67,10 @@ export interface TravelLeg {
   from: string;
   to: string;
   date: string;
+  startTime?: string | null;
   durationMinutes?: number | null;
   mode?: string | null;
+  notes?: string | null;
   estimated?: boolean;
 }
 export interface Booking {

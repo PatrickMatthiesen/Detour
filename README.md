@@ -56,6 +56,8 @@ The resource is the complete `/mcp` URL; `tripadvisor_api` is the permission sco
 
 See the [agent tool guide](docs/mcp-tools.md) for focused edits, partial-update semantics, paging, and conflict recovery.
 
+Plan can connect a separate Google trip calendar and sync scheduled records one way from Detour, including agent-written notes, Maps links and optional event reminders. Manual trip events cover checkout, departures and other practical steps. Enable the Calendar API and register the additional OAuth callback before connecting; see [calendar setup](docs/calendar.md). Saved places can also export as a CSV for manual Google My Maps import. Google Maps Saved lists do not sync automatically.
+
 ## Deployment
 
 GitHub Actions runs verification on pushes and pull requests. The manual **Deploy Detour** workflow builds through Aspire and deploys through Tailscale/SSH after verification, using the `Production` environment. See [self-hosting and workflow setup](docs/self-hosting.md). Deployment secrets come from the GitHub Production environment; persistent authentication certificates and keys stay on the server.

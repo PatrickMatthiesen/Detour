@@ -93,8 +93,13 @@ export function daySummary(snapshot: TripSnapshot, date: string): DaySummary {
       unknownItems.push(`${leg.from} → ${leg.to}`);
     }
     else {
-      untimedMinutes += duration;
-      calculationNotes.push(`Travel "${leg.from} → ${leg.to}" has no clock time; counted as untimed.`);
+      const start = parseLocalTime(leg.startTime);
+      if (start === null) {
+        untimedMinutes += duration;
+        calculationNotes.push(`Travel "${leg.from} → ${leg.to}" has no clock time; counted as untimed.`);
+      } else {
+        timedIntervals.push({ name: `${leg.from} → ${leg.to}`, start, end: start + duration, kind: "travel" });
+      }
     }
   }
 
@@ -166,6 +171,7 @@ function validDuration(value: number | null | undefined): number | null {
 function activityDuration(snapshot: TripSnapshot, activity: Activity): number | null {
   const direct = validDuration(activity.durationMinutes);
   if (direct !== null) return direct;
+  if (activity.kind && activity.kind !== "activity") return null;
   const place = activity.placeId === null
     ? undefined
     : snapshot.places.find((candidate) => candidate.id === activity.placeId);
@@ -246,7 +252,7 @@ interface TimedInterval {
   name: string;
   start: number;
   end: number;
-  kind: "activity" | "booking";
+  kind: "activity" | "booking" | "travel";
 }
 
 interface LocalTimestamp {

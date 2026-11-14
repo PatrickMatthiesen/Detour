@@ -5,6 +5,35 @@ export class HttpError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
 
+export interface CalendarStatus {
+  configured: boolean;
+  connected: boolean;
+  calendarId: string | null;
+  lastSyncedVersion: number | null;
+  lastSyncedAt: string | null;
+  error: string | null;
+  syncPending?: boolean;
+}
+
+async function calendarRequest<T>(path: string, method = "GET"): Promise<T> {
+  if (method !== "GET" && !csrfToken) await loadSession();
+  const response = await fetch(path, {
+    method,
+    credentials: "same-origin",
+    cache: "no-store",
+    signal: AbortSignal.timeout(8000),
+    headers: method === "GET" ? undefined : csrfToken ? { "X-CSRF-TOKEN": csrfToken } : undefined,
+  });
+  if (!response.ok) {
+    throw new HttpError(response.status, `Calendar API returned ${response.status}`);
+  }
+  return response.json() as Promise<T>;
+}
+
+export const getCalendarStatus = () => calendarRequest<CalendarStatus>("/api/calendar");
+export const connectCalendar = () => calendarRequest<{ url: string }>("/api/calendar/connect", "POST");
+export const syncCalendar = () => calendarRequest<CalendarStatus>("/api/calendar/sync", "POST");
+export const disconnectCalendar = () => calendarRequest<CalendarStatus>("/api/calendar", "DELETE");
 export interface AuthSession {
   authenticated: boolean;
   userId?: string | null;

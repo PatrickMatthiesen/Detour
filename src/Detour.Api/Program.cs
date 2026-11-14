@@ -98,6 +98,19 @@ builder.Services.AddAuthentication(options =>
     options.DefaultSignInScheme = IdentityConstants.ExternalScheme;
     options.DefaultChallengeScheme = IdentityConstants.ApplicationScheme;
 }).AddIdentityCookies();
+builder.Services.ConfigureApplicationCookie(options =>
+{
+    var redirect = options.Events.OnRedirectToLogin;
+    options.Events.OnRedirectToLogin = context =>
+    {
+        if (context.Request.Path.StartsWithSegments("/api/calendar"))
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            return Task.CompletedTask;
+        }
+        return redirect(context);
+    };
+});
 if (!string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(googleClientSecret))
     builder.Services.AddAuthentication().AddGoogle(GoogleDefaults.AuthenticationScheme, options =>
     {
@@ -113,6 +126,7 @@ if (!string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(goo
         };
         options.ClaimActions.MapJsonKey("email_verified", "email_verified", ClaimValueTypes.Boolean);
     });
+builder.Services.AddDetourCalendar(builder.Configuration);
 
 builder.Services.AddOpenIddict()
     .AddCore(options => options.UseEntityFrameworkCore().UseDbContext<TripDbContext>())
@@ -163,9 +177,12 @@ builder.Services.AddAuthorization(options =>
         .RequireAssertion(context => context.User.FindAll(OpenIddictConstants.Claims.Scope)
             .SelectMany(claim => claim.Value.Split(' ', StringSplitOptions.RemoveEmptyEntries))
             .Contains(oauthScope, StringComparer.Ordinal)));
+    options.AddPolicy("calendar-browser", policy => policy
+        .AddAuthenticationSchemes(IdentityConstants.ApplicationScheme)
+        .RequireAuthenticatedUser());
 });
 
-builder.Services.AddMcpServer(options => options.ServerInstructions = TripMcpTools.PhotoInstructions)
+builder.Services.AddMcpServer(options => options.ServerInstructions = TripMcpTools.PhotoInstructions + " " + TripMcpTools.CalendarInstructions)
     .WithHttpTransport(options => options.Stateless = false).WithTools<TripMcpTools>();
 builder.Services.AddScoped<OpenIddictInitializer>();
 var app = builder.Build();
@@ -333,6 +350,7 @@ app.MapGet("/auth/csrf", (HttpContext context, IAntiforgery antiforgery) =>
 });
 var logout = app.MapPost("/auth/logout", async (SignInManager<ApplicationUser> signInManager) => { await signInManager.SignOutAsync(); return Results.NoContent(); });
 if (secured) logout.RequireAuthorization("trip-data");
+app.MapDetourCalendar();
 
 app.MapGet("/connect/authorize", async (HttpContext context, UserManager<ApplicationUser> users) =>
 {

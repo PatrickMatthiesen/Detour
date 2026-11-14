@@ -101,7 +101,7 @@ public sealed class TripMcpToolsTests
         {
             var tool = McpServerTool.Create(method, (object)new TripMcpTools(null!, null!)).ProtocolTool;
             Assert.NotNull(tool.OutputSchema);
-            Assert.Equal(method.Name is "EditPlace" or "EditPlaces", tool.Annotations!.OpenWorldHint);
+            Assert.Equal(method.Name is not ("GetTrip" or "SearchPlaces"), tool.Annotations!.OpenWorldHint);
             Assert.Equal(method.Name is "GetTrip" or "SearchPlaces", tool.Annotations.ReadOnlyHint);
             if (method.Name == "EditPlaces")
             {

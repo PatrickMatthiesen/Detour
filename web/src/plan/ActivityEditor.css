@@ -1,0 +1,23 @@
+.activity-editor { margin: auto; width: min(680px, calc(100vw - 24px)); max-height: calc(100dvh - 32px); padding: 0; overflow: auto; border: 1px solid #dfe4dc; border-radius: 9px; background: #fbfaf6; color: #273535; font: 14px "IBM Plex Sans", Inter, ui-sans-serif, system-ui, sans-serif; box-shadow: 0 20px 70px #26352b30; }
+.activity-editor::backdrop { background: #25342d66; }
+.activity-editor *, .activity-editor *::before, .activity-editor *::after { box-sizing: border-box; }
+.activity-editor button, .activity-editor input, .activity-editor select, .activity-editor textarea { font: inherit; }
+.activity-editor button { cursor: pointer; }
+.activity-editor button:focus-visible, .activity-editor input:focus-visible, .activity-editor select:focus-visible, .activity-editor textarea:focus-visible { outline: 3px solid #b94f3f4d; outline-offset: 2px; }
+.activity-editor-header, .activity-editor-footer { align-items: center; display: flex; gap: 14px; justify-content: space-between; padding: 14px 18px; }
+.activity-editor-header { position: sticky; top: 0; z-index: 1; border-bottom: 1px solid #dfe4dc; background: #fbfaf6; }
+.activity-editor-header h2 { margin: 0; font: 700 21px/1.2 Lato, Inter, ui-sans-serif, system-ui, sans-serif; }
+.activity-editor-header button { align-items: center; display: inline-flex; justify-content: center; width: 30px; height: 30px; border: 0; border-radius: 4px; background: transparent; color: #58765f; }
+.activity-editor-fields { display: flex; flex-direction: column; gap: 13px; min-width: 0; margin: 0; padding: 18px; border: 0; }
+.activity-editor-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: end; }
+.activity-editor-time-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.activity-editor label { display: flex; flex-direction: column; min-width: 0; gap: 6px; color: #354743; font-size: 13px; }
+.activity-editor input, .activity-editor select, .activity-editor textarea { width: 100%; min-width: 0; border: 1px solid #cbd5cd; border-radius: 5px; padding: 9px; background: #fff; color: #273535; }
+.activity-editor textarea { resize: vertical; line-height: 1.45; }
+.activity-editor-optional, .activity-editor-help { color: #687875; font-size: 11px; font-weight: 400; }
+.activity-editor-help { margin: 0 0 9px; line-height: 1.45; }
+.activity-editor-error { margin: 12px 18px 0; color: #9b392d; font-size: 13px; }
+.activity-editor-footer { position: sticky; bottom: 0; z-index: 1; border-top: 1px solid #dfe4dc; background: #fbfaf6; }
+.activity-editor-footer button { padding: 9px 13px; border: 1px solid #cbd5cd; border-radius: 5px; background: #fff; color: #354743; }
+.activity-editor-footer .activity-editor-primary { border-color: #b94f3f; background: #b94f3f; color: #fff; }
+@media (max-width: 560px) { .activity-editor { max-height: calc(100dvh - 20px); } .activity-editor-header, .activity-editor-footer { padding: 12px 14px; } .activity-editor-fields { gap: 12px; padding: 14px; } .activity-editor-grid, .activity-editor-time-grid { grid-template-columns: 1fr; gap: 12px; } }

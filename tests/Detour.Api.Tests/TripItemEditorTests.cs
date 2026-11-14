@@ -251,6 +251,50 @@ public sealed class TripItemEditorTests
         Assert.Empty((await service.GetSnapshotAsync()).Stays);
     }
 
+    [Fact]
+    public async Task Agent_can_edit_operational_event_notes_and_clear_reminder_without_losing_time()
+    {
+        await using var db = CreateDb();
+        var (service, editor) = CreateEditor(db);
+        var initial = await service.GetSnapshotAsync();
+        var created = await editor.EditAsync("activities", "create", "checkout", new JsonObject
+        {
+            ["title"] = "Check out", ["kind"] = "check-out", ["date"] = "2026-10-08",
+            ["startTime"] = "10:00:00", ["notes"] = "Leave bags at reception", ["reminderMinutes"] = 0,
+            ["location"] = "Kyoto hotel", ["googleMapsUrl"] = "https://maps.google.com/?q=Kyoto"
+        }, initial.Version);
+        Assert.True(created.Success, created.Message);
+        var updated = await editor.EditAsync("activities", "update", "checkout", new JsonObject
+        {
+            ["notes"] = "Ask reception to hold bags until 15:00", ["reminderMinutes"] = null
+        }, created.Version);
+        Assert.True(updated.Success, updated.Message);
+        var saved = Assert.Single((await service.GetSnapshotAsync()).Activities);
+        Assert.Equal("check-out", saved.Kind);
+        Assert.Equal(new TimeOnly(10, 0), saved.StartTime);
+        Assert.Null(saved.ReminderMinutes);
+        Assert.Contains("until 15:00", GoogleCalendarProjection.Build(await service.GetSnapshotAsync())["activity:checkout"]["description"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task Invalid_calendar_fields_are_rejected_by_both_snapshot_and_agent_edits()
+    {
+        await using var db = CreateDb();
+        var (service, editor) = CreateEditor(db);
+        var initial = await service.GetSnapshotAsync();
+        initial.Activities.Add(new Activity { Id = "leave", Title = "Leave", Date = new(2026, 10, 8), ReminderMinutes = -1 });
+        Assert.IsType<ReplaceResult.Invalid>(await service.ReplaceAsync(initial, initial.Version));
+        var result = await editor.EditAsync("activities", "create", "leave", new JsonObject
+        {
+            ["title"] = "Leave", ["date"] = "2026-10-08", ["reminderMinutes"] = -1
+        }, initial.Version);
+        Assert.False(result.Success);
+        Assert.Equal("validation_failed", result.Error);
+        var saved = await service.GetSnapshotAsync();
+        Assert.Equal(initial.Version, saved.Version);
+        Assert.Empty(saved.Activities);
+    }
+
     private static TripDbContext CreateDb()
     {
         var options = new DbContextOptionsBuilder<TripDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
