@@ -20,7 +20,7 @@ jobs:
       pull-requests: write
     steps:
       # Never check out or execute code from the pull request in this job.
-      - uses: dependabot/fetch-metadata@f0c57c01084409293fb838d984e65eaba8d15001
+      - uses: dependabot/fetch-metadata@f6f48e4820a35cbcbfe69f9c8633bef8ab1c31b7
         id: metadata
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
